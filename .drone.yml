@@ -10,8 +10,7 @@ pipeline:
     tag:
       - latest
       - 3.8.1
-      - ${DRONE_COMMIT:0:8}
-      - drone-build-${DRONE_BUILD_NUMBER}
+      - 3.8.1-${DRONE_COMMIT:0:8}
 
   # Post notification to edabi-infra-alerts slack channel
   slack:
