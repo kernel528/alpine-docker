@@ -1,17 +1,13 @@
 pipeline:
-  docker-alpine3:
+  alpine3:
     when:
-      branch: 3.8
+      branch: master
       event: push
-    image: plugins/docker
-    repo: kernel528/alpine
+    image: kernel528/alpine:latest
     secrets: [ docker_username, docker_password ]
-    dockerfile: 3.8/Dockerfile
-    tag:
-      - latest
-      - 3.8.1
-      - ${DRONE_COMMIT:0:8}
-      - drone-build-${DRONE_BUILD_NUMBER}
+    commands:
+      - "uname -a"
+      - "cat /etc/alpine-release"
 
   # Post notification to edabi-infra-alerts slack channel
   slack:
