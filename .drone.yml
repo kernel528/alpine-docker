@@ -9,7 +9,7 @@ pipeline:
       - "uname -a"
       - "cat /etc/alpine-release"
 
-  # Post notification to edabi-infra-alerts slack channel
+  # Post notification to orpheus-alerts slack channel
   slack:
     when:
       status:
