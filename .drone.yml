@@ -12,7 +12,7 @@ pipeline:
       - 3.8.2
       - 3.8.2-${DRONE_COMMIT:0:8}-drone-build-${DRONE_BUILD_NUMBER}
 
-  # Post notification to edabi-infra-alerts slack channel
+  # Post notification to slack channel
   slack:
     when:
       status:
