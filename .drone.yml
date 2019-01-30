@@ -1,5 +1,5 @@
 pipeline:
-  docker-alpine3:
+  docker-alpine:
     when:
       branch: 3.8
       event: push
