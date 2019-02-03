@@ -23,8 +23,9 @@ fi
 TERM=xterm
 
 # some more ls aliases
-alias ll='ls -alF'
-alias la='ls -A'
-alias l='ls -CF'
+alias ls="ls -FCh --color=auto"
 alias ll='ls -l'
 alias lla='ll -a'
+#alias la='ls -A'
+#alias l='ls -CF'
+#alias ll='ls -l'
