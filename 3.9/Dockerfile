@@ -18,6 +18,7 @@ RUN apk update \
         openssh-client \
         vim \
         zsh \
+        git \
  && update-ca-certificates --fresh \
  && rm -rf /var/cache/apk/*
 

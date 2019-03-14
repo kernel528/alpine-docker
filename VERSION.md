@@ -6,3 +6,4 @@
 * v1.3.0 - Updated to alpine version 3.9
 * v1.3.1 - Updated to alpine version 3.9 - Try 3
 * v1.3.2 - Updated to trigger a build with drone - Try 1
+* v1.4.0 - Added git package to base.
