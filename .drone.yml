@@ -6,7 +6,7 @@ pipeline:
     image: plugins/docker
     repo: kernel528/alpine
     secrets: [ docker_username, docker_password ]
-    dockerfile: 3.9/Dockerfile
+    dockerfile: Dockerfile
     tag:
       - latest
       - 3.9

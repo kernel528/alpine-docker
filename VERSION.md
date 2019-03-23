@@ -8,3 +8,4 @@
 * v1.3.2 - Updated to trigger a build with drone - Try 1
 * v1.4.0 - Added git package to base.
 * v1.5.0 - Updated to alpine v3.9.2
+* v2.0.0 - Updated folder structure, rebuilt with latest 3.9.2 and base packages

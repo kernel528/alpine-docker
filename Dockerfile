@@ -19,6 +19,7 @@ RUN apk update \
         vim \
         zsh \
         git \
+        sudo \
  && update-ca-certificates --fresh \
  && rm -rf /var/cache/apk/*
 
