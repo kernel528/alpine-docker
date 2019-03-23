@@ -5,3 +5,4 @@
 * v1.2.0 - Updated to trigger build on new drone
 * v1.3.0 - Updated to alpine 3.9
 * v2.0.0 - Updated to build on drone 1.0.0-rc5
+* v2.1.0 - Updated to alpine 3.9.2
