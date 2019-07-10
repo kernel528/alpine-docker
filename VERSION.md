@@ -10,3 +10,4 @@
 * v1.5.0 - Updated to alpine v3.9.2
 * v2.0.0 - Updated folder structure, rebuilt with latest 3.9.2 and base packages
 * v2.0.1 - Updated to alpine v3.9.4
+* v2.0.2 - Updated slack webhook
