@@ -12,3 +12,4 @@
 * v2.0.1 - Updated to alpine v3.9.4
 * v2.0.2 - Updated slack webhook
 * v2.0.3 - Updated Dockerfile FROM to point specifically to 3.9.4
+* v3.0.0 - Update to alpine 3.10.1
