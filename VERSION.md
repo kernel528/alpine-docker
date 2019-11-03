@@ -11,3 +11,4 @@
 * v2.2.2 - Test
 * v2.2.3 - Test
 * v2.2.4 - Test
+* v2.2.5 - Test
