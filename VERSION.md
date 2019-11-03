@@ -10,3 +10,4 @@
 * v2.2.1 - Updated webhook url.
 * v2.2.2 - Test
 * v2.2.3 - Test
+* v2.2.4 - Test
