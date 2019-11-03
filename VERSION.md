@@ -13,3 +13,4 @@
 * v2.2.4 - Test
 * v2.2.5 - Test
 * v2.2.6 - Test
+* v2.2.7 - Test with new drone 1
