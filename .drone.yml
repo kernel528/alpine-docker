@@ -10,8 +10,8 @@ pipeline:
     tag:
       - latest
       - 3.10
-      - 3.10.1
-      - 3.10.1-${DRONE_COMMIT:0:8}-drone-build-${DRONE_BUILD_NUMBER}
+      - 3.10.4
+      - 3.10.4-${DRONE_COMMIT:0:8}-drone-build-${DRONE_BUILD_NUMBER}
 
   # Post notification to slack channel
   slack:
