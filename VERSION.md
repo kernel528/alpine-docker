@@ -14,3 +14,4 @@
 * v2.0.3 - Updated Dockerfile FROM to point specifically to 3.9.4
 * v3.0.0 - Update to alpine 3.10.1
 * v3.0.1 - Updated to alpine 3.10.4
+* v4.0.0 - Updated to alpine 3.11.5
