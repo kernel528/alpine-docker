@@ -8,3 +8,4 @@
 * v2.1.0 - Updated to alpine 3.9.2
 * v2.2.0 - Updated folder structure and some additional base packages
 * v2.2.1 - Updated webhook url.
+* v4.0.3 - Latest version check.
