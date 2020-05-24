@@ -8,4 +8,13 @@
 * v2.1.0 - Updated to alpine 3.9.2
 * v2.2.0 - Updated folder structure and some additional base packages
 * v2.2.1 - Updated webhook url.
+* v2.2.2 - Test
+* v2.2.3 - Test
+* v2.2.4 - Test
+* v2.2.5 - Test
+* v2.2.6 - Test
+* v2.2.7 - Test with new drone 1
+* v2.2.8 - Test with new drone 1
+* v2.2.9 - Test with new drone 1 with docker runner
+* v2.2.10 - Test with drone 0.8.6 and 4 agents.
 * v4.0.3 - Latest version check.
