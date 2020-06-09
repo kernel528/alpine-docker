@@ -1,7 +1,7 @@
 pipeline:
   docker-alpine:
     when:
-      branch: "3.11"
+      branch: "3.12"
       event: push
     image: plugins/docker
     repo: kernel528/alpine
@@ -9,9 +9,9 @@ pipeline:
     dockerfile: Dockerfile
     tag:
       - latest
-      - 3.11
-      - 3.11.6
-      - 3.11.6-${DRONE_COMMIT:0:8}-drone-build-${DRONE_BUILD_NUMBER}
+      - 3.12
+      - 3.12.0
+      - 3.12.0-${DRONE_COMMIT:0:8}-drone-build-${DRONE_BUILD_NUMBER}
 
   # Post notification to slack channel
   slack:

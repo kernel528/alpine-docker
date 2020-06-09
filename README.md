@@ -8,14 +8,14 @@ This is a base image with alpine3 linux OS, with core packages.
 
 
 ### How to Build
-``docker build -t kernel528/alpine:3.11.3 -f 3.11/Dockerfile .``
+``docker build -t kernel528/alpine:3.12.0 -f 3.11/Dockerfile .``
 
 ### Running
-``$ docker run -it --rm --name alpine3 --hostname docker-alpine3 -e TZ=CST kernel528/alpine:3.11.3 bash``
+``$ docker run -it --rm --name alpine3 --hostname docker-alpine3 -e TZ=CST kernel528/alpine:3.12.0 bash``
 
 ### Using image:
 To use this image, add this to a downstream image Dockerfile:  
-``FROM kernel528/alpine:3.11.3``
+``FROM kernel528/alpine:3.12.0``
 
 
 ### Authors
