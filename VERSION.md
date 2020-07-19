@@ -19,4 +19,6 @@
 * v4.0.2 - Trigger buld with drone 2020-05-24
 * v4.0.3 - Trigger buld with drone 2020-05-24
 * v4.1.0 - Updated to alpine v3.12.0
-* v4.1.0 - Trigger drone build.
+* v4.1.1 - Updated to try and trigger build:  2020-06-27
+* v4.1.2 - Updated to trigger drone biuld: 2020-06-28, 2, 3
+* v4.1.2 - Updated to trigger drone biuld: 2020-07-18
