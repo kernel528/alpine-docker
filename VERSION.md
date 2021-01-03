@@ -18,4 +18,5 @@
 * v2.2.9 - Test with new drone 1 with docker runner
 * v2.2.10 - Test with drone 0.8.6 and 4 agents.
 * v4.0.3 - Latest version check. 2020-05-24
-* v4.0.4 - Updated to check latest version sync.
+* v4.0.4 - Updated README
+* v4.0.5 - Updated to check latest version sync.
