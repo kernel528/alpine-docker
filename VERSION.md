@@ -22,3 +22,4 @@
 * v4.1.1 - Updated to try and trigger build:  2020-06-27
 * v4.1.2 - Updated to trigger drone biuld: 2020-06-28, 2, 3
 * v4.1.2 - Updated to trigger drone biuld: 2020-07-18
+* v4.1.3 - Updated to alpine v3.12.3
