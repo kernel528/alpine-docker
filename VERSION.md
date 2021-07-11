@@ -20,3 +20,4 @@
 * v4.0.3 - Latest version check. 2020-05-24
 * v4.0.4 - Updated README
 * v4.0.5 - Updated to check latest version 
+* v4.2.0 - Updated to alpine 3.14.0
