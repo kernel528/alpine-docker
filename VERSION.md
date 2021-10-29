@@ -25,3 +25,4 @@
 * v4.1.3 - Updated to v3.12.2
 * v4.1.4 - Updated to alpine v3.12.3
 * v4.2.0 - Updated to alpine v3.14.0
+* v4.2.1 - Updated to alping v3.14.2
