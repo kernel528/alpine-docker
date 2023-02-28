@@ -2,9 +2,11 @@ pipeline:
   docker-alpine:
     when:
       branch: "3.17"
+  alpine3:
+    when:
+      branch: master
       event: push
-    image: plugins/docker
-    repo: kernel528/alpine
+    image: kernel528/alpine:latest
     secrets: [ docker_username, docker_password ]
     dockerfile: Dockerfile
     tag:
@@ -14,6 +16,11 @@ pipeline:
       - 3.17.2-${DRONE_COMMIT:0:8}-drone-build-${DRONE_BUILD_NUMBER}
 
   # Post notification to slack channel
+    commands:
+      - "uname -a"
+      - "cat /etc/alpine-release"
+
+  # Post notification to orpheus-alerts slack channel
   slack:
     when:
       status:

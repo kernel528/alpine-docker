@@ -16,6 +16,14 @@ This is a base image with alpine3 linux OS, with core packages.
 ### Using image:
 To use this image, add this to a downstream image Dockerfile:  
 ``FROM kernel528/alpine:3.15.0``
+``docker build -t kernel528/alpine:3.14.0-f 3.14/Dockerfile .``
+
+### Running
+``$ docker run -it --rm --name alpine3 --hostname docker-alpine3 -e TZ=CST kernel528/alpine:3.14.0 bash``
+
+### Using image:
+To use this image, add this to a downstream image Dockerfile:  
+``FROM kernel528/alpine:3.14.0``
 
 
 ### Authors
