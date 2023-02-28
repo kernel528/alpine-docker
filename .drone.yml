@@ -4,7 +4,7 @@ pipeline:
       branch: "3.17"
   alpine3:
     when:
-      branch: master
+      branch: main
       event: push
     image: kernel528/alpine:latest
     secrets: [ docker_username, docker_password ]
