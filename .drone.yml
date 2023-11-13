@@ -1,7 +1,7 @@
 pipeline:
   docker-alpine:
     when:
-      branch: "3.17"
+      branch: "3.18"
   alpine3:
     when:
       branch: main
@@ -11,9 +11,9 @@ pipeline:
     dockerfile: Dockerfile
     tag:
       - latest
-      - 3.17
-      - 3.17.2
-      - 3.17.2-${DRONE_COMMIT:0:8}-drone-build-${DRONE_BUILD_NUMBER}
+      - 3.18
+      - 3.18.4
+      - 3.18.4-${DRONE_COMMIT:0:8}-drone-build-${DRONE_BUILD_NUMBER}
 
   # Post notification to slack channel
     commands:
