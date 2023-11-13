@@ -1,4 +1,4 @@
-[![Build Status](http://drone.kernelsanders.biz/api/badges/kernel528/alpine-docker/status.svg?ref=/refs/heads/3.17)](http://drone.kernelsanders.biz/kernel528/alpine-docker)
+[![Build Status](http://drone.kernelsanders.biz/api/badges/kernel528/alpine-docker/status.svg?ref=refs/heads/main)](http://drone.kernelsanders.biz/kernel528/alpine-docker)
 # This repo contains the base docker image for kernel528
 
 This image is a base image intended to be foundational to other images which provide additional functionality.
