@@ -30,3 +30,4 @@
 * v5.0.0 - UPdated to alpine v3.15.0
 * v6.0.0 - Updated to alpine v3.17.2
 * v6.1.0 - Updated to alpine v3.18.4
+* v6.1.1 - Updated with minor fixes
