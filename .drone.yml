@@ -1,7 +1,7 @@
 pipeline:
-  docker-alpine:
-    when:
-      branch: "3.18"
+  #docker-alpine:
+    #when:
+      #branch: "3.18"
   alpine3:
     when:
       branch: main
