@@ -35,6 +35,7 @@ steps:
     when:
       branch:
         - main
+        - '3.18'
   - name: notify
     image: plugins/slack
     settings:
