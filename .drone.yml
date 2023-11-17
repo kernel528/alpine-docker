@@ -1,10 +1,9 @@
 kind: pipeline
-type: docker
 name: default
 
 trigger:
   branch:
-  - main
+  - 3.18
   event:
   - push
 
