@@ -14,6 +14,9 @@ name: default
 steps:
   - name: docker-build
     image: plugins/docker
+    when:
+      branch:
+        - '3.18'
     settings:
       username:
         from_secret: docker_username
@@ -24,18 +27,15 @@ steps:
         - latest
         - 3.18
         - 3.18.4
-      when:
-        branch:
-          - '3.18'
   - name: docker-test
     image: kernel528/alpine:latest
-    commands:
-      - cat /etc/alpine-release
-      - uname -a
     when:
       branch:
         - main
         - '3.18'
+    commands:
+      - cat /etc/alpine-release
+      - uname -a
   - name: notify
     image: plugins/slack
     settings:
