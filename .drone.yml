@@ -3,7 +3,7 @@ name: default
 
 trigger:
   branch:
-  - 3.18
+  - main
   event:
   - push
 
