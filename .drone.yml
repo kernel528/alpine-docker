@@ -6,6 +6,7 @@ trigger:
   - main
   - 3.18
   event:
+    include:
     - push
     - pull_request
 
