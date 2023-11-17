@@ -2,14 +2,14 @@ kind: pipeline
 type: docker
 name: default
 
-trigger:
-  branch:
-  - '3.18'
-  - main
-  event:
-    - custom
-    - push
-    - pull_request
+# trigger:
+#  branch:
+#  - '3.18'
+#  - main
+#  event:
+#    - custom
+#    - push
+#    - pull_request
 
 steps:
   - name: docker-build
@@ -35,6 +35,7 @@ steps:
     when:
       branch:
         - main
+        - '3.18'
   - name: notify
     image: plugins/slack
     settings:
