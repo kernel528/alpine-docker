@@ -1,36 +1,30 @@
-pipeline:
-  #docker-alpine:
-    #when:
-      #branch: "3.18"
-  alpine3:
-    when:
-      branch: main
-      event: push
-    image: kernel528/alpine:latest
-    secrets: [ docker_username, docker_password ]
-    dockerfile: Dockerfile
-    tag:
-      - latest
-      - 3.18
-      - 3.18.4
-      - 3.18.4-${DRONE_COMMIT:0:8}-drone-build-${DRONE_BUILD_NUMBER}
+kind: pipeline
+name: default
 
-  # Post notification to slack channel
-    commands:
-      - "uname -a"
-      - "cat /etc/alpine-release"
+trigger:
+  branch:
+  - main
 
-  # Post notification to orpheus-alerts slack channel
-  slack:
+steps:
+  - name: docker
+    image: plugins/docker
+    settings:
+      username:
+        from_secret: docker_username
+      password:
+        from_secret: docker_password
+      repo: kernel528/alpine-docker
+      tags:
+        - latest
+        - 3.18
+        - 3.18.4
+
+  - name: notify
+    image: plugins/slack
+    settings:
+      webhook: https://hooks.slack.com/services/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
     when:
       status:
-        - success
         - failure
-      event:
-        - push
-        - tag
-    image: plugins/slack
-    channel: orpheus-alerts
-    webhook: https://hooks.slack.com/services/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
-    template: >
-      Drone build {{uppercase build.status}} for {{ build.link }} with git commit {{ truncate build.commit 8 }} to git branch ({{ build.branch }}) by {{ build.author }}.
+        - success
+
