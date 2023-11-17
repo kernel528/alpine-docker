@@ -1,15 +1,16 @@
 kind: pipeline
 type: docker
-name: docker
+name: default
 
 trigger:
-  branch:
-    include:
-      - main
-      - 3.18
   event:
-    include:
-      - push
+    - cron
+    - custom
+    - push
+    - pull_request
+    - tag
+    - promote
+    - rollback
 
 steps:
   - name: docker
