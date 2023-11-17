@@ -3,9 +3,9 @@ type: docker
 name: default
 
 trigger:
+  branch:
+  - 3.18
   event:
-    - cron
-    - custom
     - push
     - pull_request
     - tag
