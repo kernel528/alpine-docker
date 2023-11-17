@@ -9,7 +9,7 @@ trigger:
   - push
 
 steps:
-  - name: docker-publish
+  - name: docker
     image: plugins/docker
     settings:
       username:
