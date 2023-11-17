@@ -5,16 +5,14 @@ name: default
 trigger:
   branch:
   - '3.18'
+  - main
   event:
     - custom
     - push
     - pull_request
-    - tag
-    - promote
-    - rollback
 
 steps:
-  - name: docker
+  - name: docker-build
     image: plugins/docker
     settings:
       username:
@@ -26,7 +24,17 @@ steps:
         - latest
         - 3.18
         - 3.18.4
-
+      when:
+        branch:
+          - '3.18'
+  - name: docker-test
+    image: kernel528/alpine:latest
+    commands:
+      - cat /etc/alpine-release
+      - uname -a
+    when:
+      branch:
+        - main
   - name: notify
     image: plugins/slack
     settings:
