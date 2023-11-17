@@ -5,8 +5,6 @@ trigger:
   branch:
   - main
   - 3.18
-  event:
-  - push
 
 steps:
   - name: docker
