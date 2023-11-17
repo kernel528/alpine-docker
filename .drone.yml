@@ -3,17 +3,19 @@ name: default
 
 trigger:
   branch:
-  - main
+  - 3.18
+  event:
+  - push
 
 steps:
-  - name: docker
+  - name: docker-publish
     image: plugins/docker
     settings:
       username:
         from_secret: docker_username
       password:
         from_secret: docker_password
-      repo: kernel528/alpine-docker
+      repo: kernel528/alpine
       tags:
         - latest
         - 3.18
