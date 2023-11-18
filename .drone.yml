@@ -2,14 +2,14 @@ kind: pipeline
 type: docker
 name: default
 
-# trigger:
+trigger:
 #  branch:
 #  - '3.18'
 #  - main
-#  event:
-#    - custom
-#    - push
-#    - pull_request
+  event:
+    - custom
+    - push
+    - pull_request
 
 steps:
   - name: docker-build
