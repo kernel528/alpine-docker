@@ -4,7 +4,7 @@ name: default
 
 trigger:
 #  branch:
-#  - '3.18'
+#  - '3.20'
 #  - main
   event:
     - custom
@@ -16,7 +16,7 @@ steps:
     image: plugins/docker
     when:
       branch:
-        - '3.18'
+        - '3.20'
     settings:
       username:
         from_secret: docker_username
@@ -25,14 +25,14 @@ steps:
       repo: kernel528/alpine
       tags:
         - latest
-        - 3.18
-        - 3.18.4
+        - 3.20
+        - 3.20.0
   - name: docker-test
     image: kernel528/alpine:latest
     when:
       branch:
         - main
-        - '3.18'
+        - '3.20'
     commands:
       - cat /etc/alpine-release
       - uname -a
