@@ -26,7 +26,7 @@ steps:
       tags:
         - latest
         - 3.20
-        - 3.20.1
+        - 3.20.3
   - name: docker-test
     image: kernel528/alpine:latest
     when:

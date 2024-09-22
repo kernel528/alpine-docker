@@ -8,22 +8,22 @@ This is a base image with alpine3 linux OS, with core packages.
 
 
 ### How to Build
-``docker build -t kernel528/alpine:3.15.0 -f 3.11/Dockerfile .``
+``docker build -t kernel528/alpine:3.20.3 -f Dockerfile .``
 
 ### Running
-``$ docker run -it --rm --name alpine3 --hostname docker-alpine3 -e TZ=CST kernel528/alpine:3.15.0 bash``
+``$ docker run -it --rm --name alpine3 --hostname docker-alpine3 -e TZ=CST kernel528/alpine:3.20.3 bash``
 
 ### Using image:
 To use this image, add this to a downstream image Dockerfile:  
-``FROM kernel528/alpine:3.15.0``
-``docker build -t kernel528/alpine:3.14.0-f 3.14/Dockerfile .``
+``FROM kernel528/alpine:3.20.3``
+``docker build -t kernel528/alpine:3.20.3-f Dockerfile .``
 
 ### Running
-``$ docker run -it --rm --name alpine3 --hostname docker-alpine3 -e TZ=CST kernel528/alpine:3.14.0 bash``
+``$ docker run -it --rm --name alpine3 --hostname docker-alpine3 -e TZ=CST kernel528/alpine:3.20.3 bash``
 
 ### Using image:
 To use this image, add this to a downstream image Dockerfile:  
-``FROM kernel528/alpine:3.14.0``
+``FROM kernel528/alpine:3.20.3``
 
 
 ### Authors
