@@ -3,9 +3,9 @@ type: docker
 name: default
 
 trigger:
-#  branch:
-#  - '3.20'
-#  - main
+  branch:
+    - '3.20'
+    - main
   event:
     - custom
     - push
@@ -26,7 +26,7 @@ steps:
       tags:
         - latest
         - 3.20
-        - 3.20.0
+        - 3.20.3
   - name: docker-test
     image: kernel528/alpine:latest
     when:
@@ -39,7 +39,7 @@ steps:
   - name: notify
     image: plugins/slack
     settings:
-      webhook: https://hooks.slack.com/services/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
+      webhook: https://hooks.slack.com/services/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
     when:
       status:
         - failure

@@ -33,4 +33,6 @@
 * v6.1.1 - Updated with minor fixes
 * v6.1.2 - Updated to try to trigger drone build.
 * v6.1.3 - Updated to try to trigger drone build.
-* v6.1.4 - Updated to alping v3.20.0
+* v6.1.4 - Updated to alpine v3.20.0
+* v6.1.5 - Updated to alpine v3.20.1
+* v6.1.6 - Updated to alpine v3.20.3
