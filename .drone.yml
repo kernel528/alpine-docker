@@ -1,6 +1,6 @@
 kind: pipeline
 type: docker
-name: image-build
+name: alpine-image-build
 
 # Trigger conditions
 trigger:
@@ -46,7 +46,8 @@ steps:
   - name: notify
     image: plugins/slack
     settings:
-      from_secret: slack_webhook
+      webhook:
+        from_secret: slack_webhook
     when:
       status:
         - failure
