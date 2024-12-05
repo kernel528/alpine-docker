@@ -20,6 +20,8 @@ steps:
     when:
       branch:
         - '3.20'
+      event:
+        - push
     settings:
       username:
         from_secret: docker_username
@@ -37,7 +39,8 @@ steps:
     when:
       branch:
         - main
-        - '3.20'
+      event:
+        - push
     commands:
       - cat /etc/alpine-release
       - uname -a
