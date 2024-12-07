@@ -39,3 +39,4 @@
 * v3.20.3a - Build trigger refresh 2024-11-23
 * v3.20.3b - Updated slack notification to use drone secret.  Minor formatting updates.  2024-12-01
 * v3.20.3c - Update .drone.yml to only trigger test on main branch merge.
+* v3.20.3d - Using new drone-runner-docker:linux-amd64 test.
