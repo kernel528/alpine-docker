@@ -21,14 +21,16 @@ steps:
 
   # Build image
   - name: image-build
-    #image: plugins/docker
-    image: thegeeklab/drone-docker-buildx
-    privileged: true
+    image: plugins/docker
+    #image: thegeeklab/drone-docker-buildx
+    #privileged: true
     when:
       branch:
         - '3.20'
       event:
         - push
+    environment:
+      DOCKER_BUILDKIT: 1
     settings:
       platforms:
         - linux/amd64
@@ -42,8 +44,6 @@ steps:
         - latest
         - 3.20
         - 3.20.3
-    environment:
-      DOCKER_BUILDKIT: 1
 
   # Test built image
   - name: docker-test
