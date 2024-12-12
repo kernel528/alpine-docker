@@ -43,7 +43,7 @@ steps:
         - 3.20
         - 3.20.3
     environment:
-      - DOCKER_BUILDKIT: 1
+      DOCKER_BUILDKIT: 1
 
   # Test built image
   - name: docker-test
