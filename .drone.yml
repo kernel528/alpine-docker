@@ -51,7 +51,7 @@ steps:
     image: plugins/docker
     when:
       branch:
-        - '3.20-arm64'
+        - '3.20'
       event:
         - push
     environment:
@@ -86,7 +86,7 @@ steps:
     image: kernel528/alpine:latest-arm64
     when:
       branch:
-        - 'main-arm64'
+        - 'main'
       event:
         - push
     commands:
