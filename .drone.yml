@@ -70,7 +70,7 @@ steps:
         - '3.20.3-arm64'
 
   # Test built linux/amd64 image
-  - name: docker-test
+  - name: amd-docker-test
     image: kernel528/alpine:latest
     when:
       branch:
@@ -82,7 +82,7 @@ steps:
       - uname -a
 
   # Test built linux/arm64 image
-  - name: docker-test
+  - name: arm64-docker-test
     image: kernel528/alpine:latest-arm64
     when:
       branch:
