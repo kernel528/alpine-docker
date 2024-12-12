@@ -1,12 +1,16 @@
 kind: pipeline
 type: docker
-name: alpine-image-build
+name: alpine-multiarch-image
+
+platform:
+  os: linux
+  arch: amd64
 
 # Trigger conditions
 trigger:
   branch:
     - '3.20'
-    - main
+    - 'main'
   event:
     - custom
     - push
@@ -16,14 +20,19 @@ trigger:
 steps:
 
   # Build image
-  - name: docker-build
-    image: plugins/docker
+  - name: image-build
+    #image: plugins/docker
+    image: thegeeklab/drone-docker-buildx
+    privileged: true
     when:
       branch:
         - '3.20'
       event:
         - push
     settings:
+      platforms:
+        - linux/amd64
+        - linux/arm64
       username:
         from_secret: docker_username
       password:
@@ -33,13 +42,15 @@ steps:
         - latest
         - 3.20
         - 3.20.3
+    environment:
+      - DOCKER_BUILDKIT: 1
 
   # Test built image
   - name: docker-test
     image: kernel528/alpine:latest
     when:
       branch:
-        - main
+        - 'main'
       event:
         - push
     commands:
