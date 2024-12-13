@@ -1,12 +1,18 @@
 kind: pipeline
 type: docker
-name: alpine-image-build
+name: alpine-multiarch-image
+
+platform:
+  os: linux
+  arch: amd64
 
 # Trigger conditions
 trigger:
   branch:
     - '3.20'
-    - main
+    - 'main'
+    - '3.20-arm64'
+    - 'main-arm64'
   event:
     - custom
     - push
@@ -15,15 +21,21 @@ trigger:
 # Pipeline steps
 steps:
 
-  # Build image
-  - name: docker-build
+  # Build linux/amd64 image
+  - name: amd64-image-build
     image: plugins/docker
+    #image: thegeeklab/drone-docker-buildx
+    #privileged: true
     when:
       branch:
         - '3.20'
       event:
         - push
+    environment:
+      DOCKER_BUILDKIT: 1
     settings:
+      platforms:
+        - linux/amd64
       username:
         from_secret: docker_username
       password:
@@ -34,12 +46,47 @@ steps:
         - 3.20
         - 3.20.3
 
-  # Test built image
-  - name: docker-test
+  # Build linux/arm64 image
+  - name: arm64-image-build
+    image: plugins/docker
+    when:
+      branch:
+        - '3.20'
+      event:
+        - push
+    environment:
+      DOCKER_BUILDKIT: 1
+    settings:
+      platforms:
+        - linux/arm64
+      username:
+        from_secret: docker_username
+      password:
+        from_secret: docker_password
+      repo: kernel528/alpine
+      tags:
+        - 'latest-arm64'
+        - '3.20-arm64'
+        - '3.20.3-arm64'
+
+  # Test built linux/amd64 image
+  - name: amd-docker-test
     image: kernel528/alpine:latest
     when:
       branch:
-        - main
+        - 'main'
+      event:
+        - push
+    commands:
+      - cat /etc/alpine-release
+      - uname -a
+
+  # Test built linux/arm64 image
+  - name: arm64-docker-test
+    image: kernel528/alpine:latest-arm64
+    when:
+      branch:
+        - 'main'
       event:
         - push
     commands:
