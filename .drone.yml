@@ -57,64 +57,64 @@ steps:
     settings:
       webhook:
         from_secret: slack_webhook_drone_alerts
-
----
-
-kind: pipeline
-type: docker
-name: alpine-arm64
-
-trigger:
-  branch:
-    - '3.20-arm64'
-  event:
-    - pull_request
-
-# Build the docker image for amd64 architecture
-steps:
-  - name: arm64-image-build
-    image: plugins/docker
-    when:
-      branch:
-        - '3.20-arm64'
-      event:
-        - push
-    environment:
-      DOCKER_BUILDKIT: 1
-    settings:
-      platforms:
-        - linux/arm64
-      username:
-        from_secret: docker_username
-      password:
-        from_secret: docker_password
-      repo: kernel528/alpine
-      tags:
-        - 'latest-arm64'
-        - '3.20-arm64'
-        - '3.20-drone-build-${DRONE_BUILD_NUMBER}-arm64'
-        - '3.20.3-arm64'
-        - '3.20.3-drone-build-${DRONE_BUILD_NUMBER}-arm64'
-
-  # Test built linux/arm64 image
-  - name: arm64-docker-test
-    image: kernel528/alpine:latest-arm64
-    when:
-      branch:
-        - 'main'
-      event:
-        - push
-    commands:
-      - cat /etc/alpine-release
-      - uname -a
-
-  # Slack notification
-  - name: slack-notification
-    image: plugins/slack
-    when:
-      status:
-        - failure
-        - success
-    settings:
-      webhook:
-        from_secret: slack_webhook_drone_alerts
+#
+#---
+#
+#kind: pipeline
+#type: docker
+#name: alpine-arm64
+#
+#trigger:
+#  branch:
+#    - '3.20-arm64'
+#  event:
+#    - pull_request
+#
+## Build the docker image for amd64 architecture
+#steps:
+#  - name: arm64-image-build
+#    image: plugins/docker
+#    when:
+#      branch:
+#        - '3.20-arm64'
+#      event:
+#        - push
+#    environment:
+#      DOCKER_BUILDKIT: 1
+#    settings:
+#      platforms:
+#        - linux/arm64
+#      username:
+#        from_secret: docker_username
+#      password:
+#        from_secret: docker_password
+#      repo: kernel528/alpine
+#      tags:
+#        - 'latest-arm64'
+#        - '3.20-arm64'
+#        - '3.20-drone-build-${DRONE_BUILD_NUMBER}-arm64'
+#        - '3.20.3-arm64'
+#        - '3.20.3-drone-build-${DRONE_BUILD_NUMBER}-arm64'
+#
+#  # Test built linux/arm64 image
+#  - name: arm64-docker-test
+#    image: kernel528/alpine:latest-arm64
+#    when:
+#      branch:
+#        - 'main'
+#      event:
+#        - push
+#    commands:
+#      - cat /etc/alpine-release
+#      - uname -a
+#
+#  # Slack notification
+#  - name: slack-notification
+#    image: plugins/slack
+#    when:
+#      status:
+#        - failure
+#        - success
+#    settings:
+#      webhook:
+#        from_secret: slack_webhook_drone_alerts
