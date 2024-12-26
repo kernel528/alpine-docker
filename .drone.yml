@@ -40,7 +40,7 @@ steps:
     image: kernel528/alpine:latest
     when:
       branch:
-        - 'main'
+        - 'main-arm64'
       event:
         - push
     commands:
