@@ -79,7 +79,6 @@ steps:
     commands:
       - cat /etc/alpine-release
       - uname -a
-      - docker run --rm kernel528/alpine:latest uname -a
 
   # Slack notification
   - name: slack-notification
