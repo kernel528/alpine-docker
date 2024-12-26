@@ -1,4 +1,4 @@
-FROM alpine:3.20.3
+FROM alpine:3.21.0
 
 # Default to UTF-8 file.encoding
 ENV LANG C.UTF-8
@@ -56,5 +56,5 @@ RUN addgroup -g $GID $GROUP \
  && mkdir -p /home/$USER \
  && chown -R $USER:$GROUP /home/$USER
 
-# Set default user \
+# Set default user
 USER $USER
