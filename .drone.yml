@@ -3,20 +3,21 @@ type: docker
 name: alpine-amd64
 
 trigger:
-  branch:
-    - '3.20'
   event:
     - pull_request
+  branch:
+    - '3.20'
+    - '3.20-amd64'
 
 # Build the docker image for amd64 architecture
 steps:
   - name: amd64-image-build
     image: plugins/docker
     when:
-      branch:
-        - '3.20-amd64'
       event:
         - push
+      branch:
+        - '3.20-amd64'
     environment:
       DOCKER_BUILDKIT: 1
     settings:
