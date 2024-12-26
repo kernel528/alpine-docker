@@ -1,10 +1,10 @@
 kind: pipeline
 type: docker
-name: 3.20-alpine-amd64
+name: 3.21-alpine-amd64
 
 trigger:
   branch:
-    - '3.20'
+    - '3.21'
   event:
     - pull_request
 
@@ -24,10 +24,10 @@ steps:
       repo: kernel528/alpine
       tags:
         - latest
-        - '3.20'
-        - '3.20-drone-build-${DRONE_BUILD_NUMBER}-amd64'
-        - '3.20.3'
-        - '3.20.3-drone-build-${DRONE_BUILD_NUMBER}-amd64'
+        - '3.21'
+        - '3.21-drone-build-${DRONE_BUILD_NUMBER}-amd64'
+        - '3.21.0'
+        - '3.21.0-drone-build-${DRONE_BUILD_NUMBER}-amd64'
 
   # Slack notification
   - name: slack-notification
@@ -99,7 +99,7 @@ steps:
 #
 #trigger:
 #  branch:
-#    - '3.20-arm64'
+#    - '3.21-arm64'
 #  event:
 #    - pull_request
 #
@@ -109,7 +109,7 @@ steps:
 #    image: plugins/docker
 #    when:
 #      branch:
-#        - '3.20-arm64'
+#        - '3.21-arm64'
 #      event:
 #        - push
 #    environment:
@@ -124,10 +124,10 @@ steps:
 #      repo: kernel528/alpine
 #      tags:
 #        - 'latest-arm64'
-#        - '3.20-arm64'
-#        - '3.20-drone-build-${DRONE_BUILD_NUMBER}-arm64'
-#        - '3.20.3-arm64'
-#        - '3.20.3-drone-build-${DRONE_BUILD_NUMBER}-arm64'
+#        - '3.21-arm64'
+#        - '3.21-drone-build-${DRONE_BUILD_NUMBER}-arm64'
+#        - '3.21.0-arm64'
+#        - '3.21.0-drone-build-${DRONE_BUILD_NUMBER}-arm64'
 #
 #  # Test built linux/arm64 image
 #  - name: arm64-docker-test

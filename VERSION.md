@@ -41,3 +41,4 @@
 * v3.20.3c - Update .drone.yml to only trigger test on main branch merge.
 * v3.20.3d - Using new drone-runner-docker:linux-amd64 test.
 * v3.20.3e - Updated README badges.  Drone refactor.  Added base .zshc file.
+* 3.21.0 - Updated to alpine 3.21.0.  Updated .drone.yml to reference 3.21 branches.
