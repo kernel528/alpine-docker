@@ -1,23 +1,17 @@
 kind: pipeline
 type: docker
-name: alpine-amd64
+name: 3.20-alpine-amd64
 
 trigger:
-  event:
-    - pull_request
   branch:
     - '3.20'
+  event:
+    - pull_request
 
 # Build the docker image for amd64 architecture
 steps:
   - name: amd64-image-build
     image: plugins/docker
-    when:
-      event:
-        - push
-      branch:
-        - '3.20-amd64'
-        - '3.20'
     environment:
       DOCKER_BUILDKIT: 1
     settings:
@@ -35,18 +29,6 @@ steps:
         - '3.20.3'
         - '3.20.3-drone-build-${DRONE_BUILD_NUMBER}-amd64'
 
-  # Test built linux/amd64 image
-  - name: amd64-docker-test
-    image: kernel528/alpine:latest
-    when:
-      branch:
-        - 'main-arm64'
-      event:
-        - push
-    commands:
-      - cat /etc/alpine-release
-      - uname -a
-
   # Slack notification
   - name: slack-notification
     image: plugins/slack
@@ -57,56 +39,47 @@ steps:
     settings:
       webhook:
         from_secret: slack_webhook_drone_alerts
-
 ---
 
 kind: pipeline
 type: docker
-name: alpine-arm64
+name: main-alpine-amd64
 
 trigger:
-  branch:
-    - '3.20-arm64'
   event:
-    - pull_request
+    - push
+    - tag
+  branch:
+    - main
 
-# Build the docker image for amd64 architecture
+# Build the docker image for the main branch & tagged release
 steps:
-  - name: arm64-image-build
+  - name: main-docker-image-build
     image: plugins/docker
     when:
-      branch:
-        - '3.20-arm64'
       event:
-        - push
-    environment:
-      DOCKER_BUILDKIT: 1
+        - tag
     settings:
-      platforms:
-        - linux/arm64
       username:
         from_secret: docker_username
       password:
         from_secret: docker_password
       repo: kernel528/alpine
       tags:
-        - 'latest-arm64'
-        - '3.20-arm64'
-        - '3.20-drone-build-${DRONE_BUILD_NUMBER}-arm64'
-        - '3.20.3-arm64'
-        - '3.20.3-drone-build-${DRONE_BUILD_NUMBER}-arm64'
+        - ${DRONE_TAG}
 
-  # Test built linux/arm64 image
-  - name: arm64-docker-test
-    image: kernel528/alpine:latest-arm64
+  # Test docker image
+  - name: latest-alpine-amd64-test
+    image: kernel528/alpine:latest
     when:
       branch:
-        - 'main'
+        - main
       event:
         - push
     commands:
       - cat /etc/alpine-release
       - uname -a
+      - docker run --rm kernel528/alpine:latest uname -a
 
   # Slack notification
   - name: slack-notification
@@ -118,3 +91,64 @@ steps:
     settings:
       webhook:
         from_secret: slack_webhook_drone_alerts
+#
+#---
+#
+#kind: pipeline
+#type: docker
+#name: alpine-arm64
+#
+#trigger:
+#  branch:
+#    - '3.20-arm64'
+#  event:
+#    - pull_request
+#
+## Build the docker image for amd64 architecture
+#steps:
+#  - name: arm64-image-build
+#    image: plugins/docker
+#    when:
+#      branch:
+#        - '3.20-arm64'
+#      event:
+#        - push
+#    environment:
+#      DOCKER_BUILDKIT: 1
+#    settings:
+#      platforms:
+#        - linux/arm64
+#      username:
+#        from_secret: docker_username
+#      password:
+#        from_secret: docker_password
+#      repo: kernel528/alpine
+#      tags:
+#        - 'latest-arm64'
+#        - '3.20-arm64'
+#        - '3.20-drone-build-${DRONE_BUILD_NUMBER}-arm64'
+#        - '3.20.3-arm64'
+#        - '3.20.3-drone-build-${DRONE_BUILD_NUMBER}-arm64'
+#
+#  # Test built linux/arm64 image
+#  - name: arm64-docker-test
+#    image: kernel528/alpine:latest-arm64
+#    when:
+#      branch:
+#        - 'main'
+#      event:
+#        - push
+#    commands:
+#      - cat /etc/alpine-release
+#      - uname -a
+#
+#  # Slack notification
+#  - name: slack-notification
+#    image: plugins/slack
+#    when:
+#      status:
+#        - failure
+#        - success
+#    settings:
+#      webhook:
+#        from_secret: slack_webhook_drone_alerts
