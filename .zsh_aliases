@@ -1,0 +1,24 @@
+# Aliases script file
+
+# Directory listings
+alias ls="ls -FCh --color=auto"
+alias ll="ls -l"
+alias lla="ll -a"
+alias lsa="ls -a"
+alias ltr="ls -altr"
+
+# Environment aliases
+alias dusort="du -sk * | sort -n"
+alias dusorthid="du -sk .???* | sort -n"
+alias df="df -h"
+alias h="history"
+alias epath="echo $PATH | tr ":" "\n""
+alias eldpath="echo $LD_LIBRARY_PATH | tr ":" "\n""
+alias agentadd="`eval ssh-agent`; ssh-add"
+
+# Misc aliases
+alias psall="ps -eALo pid,spid,ppid,user,priority,ni,pcpu,vsize,time,args"
+
+# Kubernetes
+alias k='kubectl'
+alias kc='kubectl config'
