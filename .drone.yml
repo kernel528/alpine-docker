@@ -7,7 +7,6 @@ trigger:
     - pull_request
   branch:
     - '3.20'
-    - '3.20-amd64'
 
 # Build the docker image for amd64 architecture
 steps:
