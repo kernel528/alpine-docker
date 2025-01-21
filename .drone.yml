@@ -23,7 +23,8 @@ steps:
         from_secret: docker_username
       password:
         from_secret: docker_password
-      repo: ${DOCKER_REPO}/alpine
+      repo:
+        from_secret: docker_repo_alpine
       tags:
         - latest
         - '3.21'
@@ -69,16 +70,17 @@ steps:
         from_secret: docker_username
       password:
         from_secret: docker_password
-      repo: ${DOCKER_REPO}/alpine
+      repo:
+        from_secret: docker_repo_alpine
       tags:
         - ${DRONE_TAG}
 
   # Test docker image
   - name: latest-alpine-amd64-test
-    image: ${DOCKER_REPO}/alpine:latest
+    image: ${DOCKER_REPO}/:latest
     environment:
       DOCKER_REPO:
-        from_secret: docker_repo
+        from_secret: docker_repo_alpine
     when:
       branch:
         - main
