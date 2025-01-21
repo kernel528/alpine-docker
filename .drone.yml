@@ -77,10 +77,10 @@ steps:
 
   # Test docker image
   - name: latest-alpine-amd64-test
-    image: ${DOCKER_REPO}/:latest
+    image: ${DOCKER_REPO}/alpine:latest # Construct the test image path dynamically
     environment:
       DOCKER_REPO:
-        from_secret: docker_repo_alpine
+        from_secret: docker_repo
     when:
       branch:
         - main
