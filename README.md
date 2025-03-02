@@ -7,6 +7,7 @@
 # This repo contains the base docker image for kernel528
 
 This image is a base image intended to be foundational to other images which provide additional functionality.
+- Upstream repo: [docker-alpine](https://github.com/alpinelinux/docker-alpine/tree/17fe3d1e2d2cbf54d745139eab749c252e35b883)
 
 ### Overview
 This is a base image with alpine3 linux OS, with core packages.
