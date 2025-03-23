@@ -43,4 +43,5 @@
 * v3.20.3e - Updated README badges.  Drone refactor.  Added base .zshc file.
 * 3.21.0 - Updated to alpine 3.21.0.  Updated .drone.yml to reference 3.21 branches.
 * 3.21.2 - Updated to alpine 3.21.2.  Replaced hardcoded docker repo with $DOCKER_REPO drone org secret.
+* 3.21.2a - Just updating this to test drone working config.
 * 3.21.3 - Updated to alpine 3.21.3.
