@@ -1,10 +1,10 @@
 kind: pipeline
 type: docker
-name: 3.21-alpine-amd64
+name: 3.22-alpine-amd64
 
 trigger:
   branch:
-    - '3.21'
+    - '3.22'
   event:
     - pull_request
 
@@ -27,10 +27,10 @@ steps:
         from_secret: docker_repo_alpine
       tags:
         - latest
-        - '3.21'
-        - '3.21-drone-build-${DRONE_BUILD_NUMBER}-amd64'
-        - '3.21.3'
-        - '3.21.3-drone-build-${DRONE_BUILD_NUMBER}-amd64'
+        - '3.22'
+        - '3.22-drone-build-${DRONE_BUILD_NUMBER}-amd64'
+        - '3.22.0'
+        - '3.22.0-drone-build-${DRONE_BUILD_NUMBER}-amd64'
 
   # Slack notification
   - name: slack-notification
