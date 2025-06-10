@@ -27,7 +27,7 @@
 * v3.14.0 - Updated to alpine v3.14.0
 * v3.14.2 - Updated to alpine v3.14.2
 * v3.14.3 - Updated to alpine v3.14.3
-* v3.15.0 - UPdated to alpine v3.15.0
+* v3.15.0 - Updated to alpine v3.15.0
 * v3.17.2 - Updated to alpine v3.17.2
 * v3.18.4 - Updated to alpine v3.18.4
 * v3.18.4a - Updated with minor fixes
