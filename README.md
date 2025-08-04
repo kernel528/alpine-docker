@@ -1,4 +1,4 @@
-[![Build Status](http://drone.kernelsanders.biz:8080/api/badges/kernel528/alpine-docker/status.svg?ref=refs/heads/3.22)](http://drone.kernelsanders.biz:8080/kernel528/alpine-docker)
+[![Build Status](http://drone.kernelsanders.biz:8080/api/badges/kernel528/alpine-docker/status.svg)](http://drone.kernelsanders.biz:8080/kernel528/alpine-docker)
 [![Latest Version](https://img.shields.io/github/v/tag/kernel528/alpine-docker)](https://github.com/kernel528/alpine-docker/releases/latest)
 [![Docker Pulls](https://img.shields.io/docker/pulls/kernel528/alpine)](https://hub.docker.com/r/kernel528/alpine)
 [![Docker Image Size (tag)](https://img.shields.io/docker/image-size/kernel528/alpine/3.21.0)](https://hub.docker.com/r/kernel528/alpine/3.21.0)
