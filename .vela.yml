@@ -1,99 +1,15 @@
-kind: pipeline
-type: docker
-name: 3.22-alpine-amd64
+version: "1"
 
-trigger:
-  branch:
-    - '3.22'
-  event:
-    - pull_request
-
-# Build the docker image for amd64 architecture
+# In this pipeline, commands are executed inside the container as the entrypoint.
+# If any command returns a non-zero exit code, the pipeline fails and exits.
 steps:
-  - name: amd64-image-build
-    image: plugins/docker
-    environment:
-      DOCKER_BUILDKIT: 1
-      DOCKER_REPO:
-        from_secret: docker_repo
-    settings:
-      platforms:
-        - linux/amd64
-      username:
-        from_secret: docker_username
-      password:
-        from_secret: docker_password
-      repo:
-        from_secret: docker_repo_alpine
-      tags:
-        - latest
-        - '3.22'
-        - '3.22-drone-build-${DRONE_BUILD_NUMBER}-amd64'
-        - '3.22.1'
-        - '3.22.1-drone-build-${DRONE_BUILD_NUMBER}-amd64'
 
-  # Slack notification
-  - name: slack-notification
-    image: plugins/slack
-    when:
-      status:
-        - failure
-        - success
-    settings:
-      webhook:
-        from_secret: slack_webhook_drone_alerts
----
-
-kind: pipeline
-type: docker
-name: main-alpine-amd64
-
-trigger:
-  event:
-    - push
-    - tag
-  branch:
-    - main
-
-# Build the docker image for the main branch & tagged release
-steps:
-  - name: main-docker-image-build
-    image: plugins/docker
-    environment:
-      DOCKER_REPO:
-        from_secret: docker_repo
-    when:
-      event:
-        - tag
-    settings:
-      username:
-        from_secret: docker_username
-      password:
-        from_secret: docker_password
-      repo:
-        from_secret: docker_repo_alpine
-      tags:
-        - ${DRONE_TAG}
-
-  # Test docker image
-  - name: latest-alpine-amd64-test
-    image: kernel528/alpine:latest # Construct the test image path dynamically
-    when:
-      branch:
-        - main
-      event:
-        - push
+  - name: Welcome
+    # This ruleset would scope the step to only executing
+    # under the conditions a push to the main branch occurred
+    ruleset:
+      event: push
+      branch: main
+    image: alpine
     commands:
-      - cat /etc/alpine-release
-      - uname -a
-
-  # Slack notification
-  - name: slack-notification
-    image: plugins/slack
-    when:
-      status:
-        - failure
-        - success
-    settings:
-      webhook:
-        from_secret: slack_webhook_drone_alerts
+      - echo "Welcome to the Vela docs"
