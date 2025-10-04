@@ -1,0 +1,15 @@
+version: "1"
+
+# In this pipeline, commands are executed inside the container as the entrypoint.
+# If any command returns a non-zero exit code, the pipeline fails and exits.
+steps:
+
+  - name: Welcome
+    # This ruleset would scope the step to only executing
+    # under the conditions a push to the main branch occurred
+    ruleset:
+      event: push
+      branch: main
+    image: alpine
+    commands:
+      - echo "Welcome to the Vela docs"

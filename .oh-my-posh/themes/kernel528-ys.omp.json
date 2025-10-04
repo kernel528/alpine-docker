@@ -43,7 +43,7 @@
           "properties": {
             "cache_duration": "none"
           },
-          "template": "<cyan>{{ .UserName }}</> <darkGray>@</> <green>{{ .HostName }}</> ",
+          "template": "<cyan>{{ .UserName }}</><darkGray> @ </><green>{{ .HostName }}</> ",
           "type": "session",
           "style": "plain"
         },
@@ -65,11 +65,6 @@
           "template": "<darkGray>on</> <white>git:</><cyan>{{ .HEAD }}</>{{ if .Working.Changed }}<red> x</>{{ end }} ",
           "type": "git",
           "style": "plain"
-        },
-        {
-          "properties": {
-            "fetch_status": true
-          }
         },
         {
           "foreground": "darkGray",

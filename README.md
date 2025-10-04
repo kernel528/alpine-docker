@@ -1,4 +1,4 @@
-[![Build Status](http://drone.kernelsanders.biz:8080/api/badges/kernel528/alpine-docker/status.svg?ref=refs/heads/3.21)](http://drone.kernelsanders.biz:8080/kernel528/alpine-docker)
+[![Build Status](http://drone.kernelsanders.biz:8080/api/badges/kernel528/alpine-docker/status.svg)](http://drone.kernelsanders.biz:8080/kernel528/alpine-docker)
 [![Latest Version](https://img.shields.io/github/v/tag/kernel528/alpine-docker)](https://github.com/kernel528/alpine-docker/releases/latest)
 [![Docker Pulls](https://img.shields.io/docker/pulls/kernel528/alpine)](https://hub.docker.com/r/kernel528/alpine)
 [![Docker Image Size (tag)](https://img.shields.io/docker/image-size/kernel528/alpine/3.21.0)](https://hub.docker.com/r/kernel528/alpine/3.21.0)
@@ -14,22 +14,22 @@ This is a base image with alpine3 linux OS, with core packages.
 
 
 ### How to Build
-``docker build -t kernel528/alpine:3.22.0 -f Dockerfile .``
+``docker build -t kernel528/alpine:3.22.1 -f Dockerfile .``
 
 ### Running
-``$ docker run -it --rm --name alpine3 --hostname docker-alpine3 -e TZ=CST kernel528/alpine:3.22.0 bash``
+``$ docker run -it --rm --name alpine3 --hostname docker-alpine3 -e TZ=CST kernel528/alpine:3.22.1 bash``
 
 ### Using image:
 To use this image, add this to a downstream image Dockerfile:  
-``FROM kernel528/alpine:3.22.0``
-``docker build -t kernel528/alpine:3.22.0 -f Dockerfile .``
+``FROM kernel528/alpine:3.22.1``
+``docker build -t kernel528/alpine:3.22.1 -f Dockerfile .``
 
 ### Running
-``$ docker run -it --rm --name alpine3 --hostname docker-alpine3 -e TZ=CST kernel528/alpine:3.22.0 bash``
+``$ docker run -it --rm --name alpine3 --hostname docker-alpine3 -e TZ=CST kernel528/alpine:3.22.1 bash``
 
 ### Using image:
 To use this image, add this to a downstream image Dockerfile:  
-``FROM kernel528/alpine:3.22.0``
+``FROM kernel528/alpine:3.22.1``
 
 
 ### Authors
