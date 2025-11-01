@@ -47,3 +47,4 @@
 * 3.21.3 - Updated to alpine 3.21.3 release.
 * 3.22.0 - Updated to alpine 3.22.0 release.
 * 3.22.1 - Updated to alpine 3.22.1 release.
+* 3.22.2 - UPdated to alpine 3.22.2 release.
