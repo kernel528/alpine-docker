@@ -1,4 +1,4 @@
-FROM alpine:3.22.1
+FROM alpine:3.22.2
 
 # Default to UTF-8 file.encoding
 ENV LANG C.UTF-8
