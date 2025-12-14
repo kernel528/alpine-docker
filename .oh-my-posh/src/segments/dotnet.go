@@ -4,7 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/jandedobbeleer/oh-my-posh/src/constants"
-	"github.com/jandedobbeleer/oh-my-posh/src/properties"
+	"github.com/jandedobbeleer/oh-my-posh/src/segments/options"
 )
 
 type globalJSON struct {
@@ -15,12 +15,12 @@ type globalJSON struct {
 
 const (
 	// FetchSDKVersion fetches the SDK version in global.json
-	FetchSDKVersion properties.Property = "fetch_sdk_version"
+	FetchSDKVersion options.Option = "fetch_sdk_version"
 )
 
 type Dotnet struct {
 	SDKVersion string
-	language
+	Language
 	Unsupported bool
 }
 
@@ -34,6 +34,7 @@ func (d *Dotnet) Enabled() bool {
 		"*.csx",
 		"*.vb",
 		"*.sln",
+		"*.slnx",
 		"*.slnf",
 		"*.csproj",
 		"*.vbproj",
@@ -52,14 +53,14 @@ func (d *Dotnet) Enabled() bool {
 	}
 	d.versionURLTemplate = "https://github.com/dotnet/core/blob/master/release-notes/{{ .Major }}.{{ .Minor }}/{{ .Major }}.{{ .Minor }}.{{ substr 0 1 .Patch }}/{{ .Major }}.{{ .Minor }}.{{ substr 0 1 .Patch }}.md" //nolint: lll
 
-	enabled := d.language.Enabled()
+	enabled := d.Language.Enabled()
 	if !enabled {
 		return false
 	}
 
 	d.Unsupported = d.exitCode == constants.DotnetExitCode
 
-	if !d.props.GetBool(FetchSDKVersion, false) {
+	if !d.options.Bool(FetchSDKVersion, false) {
 		return true
 	}
 

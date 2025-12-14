@@ -1,4 +1,3 @@
-export POSH_THEME=::CONFIG::
 export POSH_SHELL='bash'
 export POSH_SHELL_VERSION=$BASH_VERSION
 export POWERLINE_COMMAND='oh-my-posh'
@@ -17,8 +16,6 @@ _omp_no_status=true
 _omp_status=0
 _omp_pipestatus=0
 _omp_executable=::OMP::
-
-export POSH_SESSION_ID=::SESSION_ID::
 
 # switches to enable/disable features
 _omp_cursor_positioning=0
@@ -112,7 +109,7 @@ function _omp_get_secondary() {
 function _omp_hook() {
     _omp_status=$? _omp_pipestatus=("${PIPESTATUS[@]}")
 
-    if [[ ${#BP_PIPESTATUS[@]} -ge ${#_omp_pipestatus[@]} ]]; then
+    if [[ -v BP_PIPESTATUS && ${#BP_PIPESTATUS[@]} -ge ${#_omp_pipestatus[@]} ]]; then
         _omp_pipestatus=("${BP_PIPESTATUS[@]}")
     fi
 
@@ -161,7 +158,7 @@ function _omp_install_hook() {
         prompt_command+=("$cmd")
     done
 
-    PROMPT_COMMAND=(_omp_hook "${prompt_command[@]}")
+    PROMPT_COMMAND=("${prompt_command[@]}" _omp_hook)
 }
 
 _omp_install_hook

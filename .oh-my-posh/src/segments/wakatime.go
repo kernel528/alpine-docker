@@ -3,14 +3,14 @@ package segments
 import (
 	"encoding/json"
 
-	"github.com/jandedobbeleer/oh-my-posh/src/properties"
+	"github.com/jandedobbeleer/oh-my-posh/src/segments/options"
 	"github.com/jandedobbeleer/oh-my-posh/src/template"
 )
 
 type Wakatime struct {
-	base
+	Base
 
-	wtData
+	WtData
 }
 
 type wtTotals struct {
@@ -18,7 +18,7 @@ type wtTotals struct {
 	Seconds float64 `json:"seconds"`
 }
 
-type wtData struct {
+type WtData struct {
 	Start           string   `json:"start"`
 	End             string   `json:"end"`
 	CumulativeTotal wtTotals `json:"cumulative_total"`
@@ -39,14 +39,14 @@ func (w *Wakatime) setAPIData() error {
 		return err
 	}
 
-	httpTimeout := w.props.GetInt(properties.HTTPTimeout, properties.DefaultHTTPTimeout)
+	httpTimeout := w.options.Int(options.HTTPTimeout, options.DefaultHTTPTimeout)
 
 	body, err := w.env.HTTPRequest(url, nil, httpTimeout)
 	if err != nil {
 		return err
 	}
 
-	err = json.Unmarshal(body, &w.wtData)
+	err = json.Unmarshal(body, &w.WtData)
 	if err != nil {
 		return err
 	}
@@ -55,6 +55,6 @@ func (w *Wakatime) setAPIData() error {
 }
 
 func (w *Wakatime) getURL() (string, error) {
-	url := w.props.GetString(URL, "")
+	url := w.options.String(URL, "")
 	return template.Render(url, w)
 }

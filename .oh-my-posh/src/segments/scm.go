@@ -7,17 +7,17 @@ import (
 	"strings"
 
 	"github.com/jandedobbeleer/oh-my-posh/src/log"
-	"github.com/jandedobbeleer/oh-my-posh/src/properties"
 	"github.com/jandedobbeleer/oh-my-posh/src/runtime"
+	"github.com/jandedobbeleer/oh-my-posh/src/segments/options"
 	"github.com/jandedobbeleer/oh-my-posh/src/template"
 	"github.com/jandedobbeleer/oh-my-posh/src/text"
 )
 
 const (
 	// Fallback to native command
-	NativeFallback properties.Property = "native_fallback"
+	NativeFallback options.Option = "native_fallback"
 	// Override the built-in status formats
-	StatusFormats properties.Property = "status_formats"
+	StatusFormats options.Option = "status_formats"
 )
 
 // ScmStatus represents part of the status of a repository
@@ -83,8 +83,8 @@ func (s *ScmStatus) String() string {
 	return strings.TrimSpace(status.String())
 }
 
-type scm struct {
-	base
+type Scm struct {
+	Base
 
 	Dir             string
 	RepoName        string
@@ -99,10 +99,10 @@ type scm struct {
 
 const (
 	// BranchTemplate allows to specify a template for the branch name
-	BranchTemplate properties.Property = "branch_template"
+	BranchTemplate options.Option = "branch_template"
 )
 
-func (s *scm) RelativeDir() string {
+func (s *Scm) RelativeDir() string {
 	if s.repoRootDir == "" {
 		return ""
 	}
@@ -123,8 +123,8 @@ func (s *scm) RelativeDir() string {
 	return rel
 }
 
-func (s *scm) formatBranch(branch string) string {
-	mappedBranches := s.props.GetKeyValueMap(MappedBranches, make(map[string]string))
+func (s *Scm) formatBranch(branch string) string {
+	mappedBranches := s.options.KeyValueMap(MappedBranches, make(map[string]string))
 
 	// sort the keys alphabetically
 	keys := make([]string, 0, len(mappedBranches))
@@ -157,7 +157,7 @@ func (s *scm) formatBranch(branch string) string {
 		break
 	}
 
-	branchTemplate := s.props.GetString(BranchTemplate, "")
+	branchTemplate := s.options.String(BranchTemplate, "")
 	if branchTemplate == "" {
 		return branch
 	}
@@ -170,11 +170,11 @@ func (s *scm) formatBranch(branch string) string {
 	return txt
 }
 
-func (s *scm) fileContent(folder, file string) string {
+func (s *Scm) fileContent(folder, file string) string {
 	return strings.Trim(s.env.FileContent(folder+"/"+file), " \r\n")
 }
 
-func (s *scm) convertToWindowsPath(path string) string {
+func (s *Scm) convertToWindowsPath(path string) string {
 	// only convert when in Windows, or when in a WSL shared folder and not using the native fallback
 	if s.env.GOOS() == runtime.WINDOWS || (s.IsWslSharedPath && !s.nativeFallback) {
 		return s.env.ConvertToWindowsPath(path)
@@ -183,7 +183,7 @@ func (s *scm) convertToWindowsPath(path string) string {
 	return path
 }
 
-func (s *scm) convertToLinuxPath(path string) string {
+func (s *Scm) convertToLinuxPath(path string) string {
 	if !s.IsWslSharedPath {
 		return path
 	}
@@ -191,7 +191,7 @@ func (s *scm) convertToLinuxPath(path string) string {
 	return s.env.ConvertToLinuxPath(path)
 }
 
-func (s *scm) hasCommand(command string) bool {
+func (s *Scm) hasCommand(command string) bool {
 	if len(s.command) > 0 {
 		return true
 	}
@@ -211,7 +211,7 @@ func (s *scm) hasCommand(command string) bool {
 	s.CommandMissing = true
 
 	// only use the native fallback when set by the user
-	if s.IsWslSharedPath && s.props.GetBool(NativeFallback, false) {
+	if s.IsWslSharedPath && s.options.Bool(NativeFallback, false) {
 		command = strings.TrimSuffix(command, ".exe")
 		if s.env.HasCommand(command) {
 			s.command = command

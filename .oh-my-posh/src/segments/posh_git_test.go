@@ -1,11 +1,13 @@
 package segments
 
 import (
+	"errors"
+	"sync"
 	"testing"
 
-	"github.com/jandedobbeleer/oh-my-posh/src/properties"
 	"github.com/jandedobbeleer/oh-my-posh/src/runtime"
 	"github.com/jandedobbeleer/oh-my-posh/src/runtime/mock"
+	"github.com/jandedobbeleer/oh-my-posh/src/segments/options"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -72,7 +74,7 @@ func TestPoshGitSegment(t *testing.T) {
 			ExpectedEnabled: true,
 		},
 		{
-			Case: "Changes in Working and Staging, branch ahead an behind",
+			Case: "Changes in Working and Staging, branch ahead and behind",
 			PoshGitJSON: `
 			{
 				"RepoName": "oh-my-posh",
@@ -187,18 +189,23 @@ func TestPoshGitSegment(t *testing.T) {
 		env.On("Home").Return("/Users/bill")
 		env.On("GOOS").Return(runtime.LINUX)
 		env.On("RunCommand", "git", []string{"-C", "", "--no-optional-locks", "-c", "core.quotepath=false",
-			"-c", "color.status=false", "remote", "get-url", "origin"}).Return("github.com/cli", nil)
+			"-c", "color.status=false", "remote", "get-url", origin}).Return("github.com/cli", nil)
 
-		props := &properties.Map{
+		props := &options.Map{
 			FetchUpstreamIcon: tc.FetchUpstreamIcon,
 		}
 
 		g := &Git{
-			scm: scm{
+			Scm: Scm{
 				command: GITCOMMAND,
 			},
 		}
 		g.Init(props, env)
+
+		g.configOnce = sync.Once{}
+		g.configOnce.Do(func() {
+			g.configErr = errors.New("no config")
+		})
 
 		if tc.Template == "" {
 			tc.Template = g.Template()
@@ -236,7 +243,7 @@ func TestParsePoshGitHEAD(t *testing.T) {
 
 	for _, tc := range cases {
 		g := &Git{}
-		g.Init(&properties.Map{}, new(mock.Environment))
+		g.Init(&options.Map{}, new(mock.Environment))
 
 		assert.Equal(t, tc.ExpectedString, g.parsePoshGitHEAD(tc.HEAD), tc.Case)
 	}

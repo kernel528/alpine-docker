@@ -41,7 +41,7 @@ const (
 type Svn struct {
 	Working *SvnStatus
 	Branch  string
-	scm
+	Scm
 	BaseRev int
 }
 
@@ -106,10 +106,10 @@ func (s *Svn) setSvnStatus() {
 		s.Branch = branch[2:]
 	}
 
-	statusFormats := s.props.GetKeyValueMap(StatusFormats, map[string]string{})
+	statusFormats := s.options.KeyValueMap(StatusFormats, map[string]string{})
 	s.Working = &SvnStatus{ScmStatus: ScmStatus{Formats: statusFormats}}
 
-	displayStatus := s.props.GetBool(FetchStatus, false)
+	displayStatus := s.options.Bool(FetchStatus, false)
 	if !displayStatus {
 		return
 	}

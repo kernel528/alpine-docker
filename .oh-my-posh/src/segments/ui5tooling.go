@@ -3,7 +3,7 @@ package segments
 const UI5ToolingYamlPattern = "*ui5*.y*ml"
 
 type UI5Tooling struct {
-	language
+	Language
 	HasUI5YamlInParentDir bool
 }
 
@@ -13,7 +13,7 @@ func (u *UI5Tooling) Template() string {
 
 func (u *UI5Tooling) Enabled() bool {
 	u.extensions = []string{UI5ToolingYamlPattern}
-	u.displayMode = u.props.GetString(DisplayMode, DisplayModeContext)
+	u.displayMode = u.options.String(DisplayMode, DisplayModeContext)
 	u.commands = []*cmd{
 		{
 			executable: "ui5",
@@ -22,10 +22,10 @@ func (u *UI5Tooling) Enabled() bool {
 		},
 	}
 	u.versionURLTemplate = "https://github.com/SAP/ui5-cli/releases/tag/v{{ .Full }}"
-	u.language.loadContext = u.loadContext
-	u.language.inContext = u.inContext
+	u.Language.loadContext = u.loadContext
+	u.Language.inContext = u.inContext
 
-	return u.language.Enabled()
+	return u.Language.Enabled()
 }
 
 func (u *UI5Tooling) loadContext() {

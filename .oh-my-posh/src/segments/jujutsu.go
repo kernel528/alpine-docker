@@ -1,20 +1,20 @@
 package segments
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/jandedobbeleer/oh-my-posh/src/log"
-	"github.com/jandedobbeleer/oh-my-posh/src/properties"
 	"github.com/jandedobbeleer/oh-my-posh/src/runtime"
 	"github.com/jandedobbeleer/oh-my-posh/src/runtime/path"
+	"github.com/jandedobbeleer/oh-my-posh/src/segments/options"
 )
 
 const (
 	JUJUTSUCOMMAND = "jj"
 
-	jjLogTemplate = `change_id.shortest() ++ "\n" ++ diff.summary()`
-
-	IgnoreWorkingCopy properties.Property = "ignore_working_copy"
+	IgnoreWorkingCopy options.Option = "ignore_working_copy"
+	ChangeIDMinLen    options.Option = "change_id_min_len"
 )
 
 type JujutsuStatus struct {
@@ -37,7 +37,7 @@ func (s *JujutsuStatus) add(code byte) {
 type Jujutsu struct {
 	Working  *JujutsuStatus
 	ChangeID string
-	scm
+	Scm
 }
 
 func (jj *Jujutsu) Template() string {
@@ -45,13 +45,13 @@ func (jj *Jujutsu) Template() string {
 }
 
 func (jj *Jujutsu) Enabled() bool {
-	displayStatus := jj.props.GetBool(FetchStatus, false)
+	displayStatus := jj.options.Bool(FetchStatus, false)
 
 	if !jj.shouldDisplay(displayStatus) {
 		return false
 	}
 
-	statusFormats := jj.props.GetKeyValueMap(StatusFormats, map[string]string{})
+	statusFormats := jj.options.KeyValueMap(StatusFormats, map[string]string{})
 	jj.Working = &JujutsuStatus{ScmStatus: ScmStatus{Formats: statusFormats}}
 
 	if displayStatus {
@@ -68,6 +68,16 @@ func (jj *Jujutsu) CacheKey() (string, bool) {
 	}
 
 	return dir.Path, true
+}
+
+func (jj *Jujutsu) ClosestBookmarks() string {
+	statusString, err := jj.getJujutsuCommandOutput("log", "-r", "heads(::@ & bookmarks())", "--no-graph", "-T", "bookmarks")
+	if err != nil {
+		return ""
+	}
+
+	lines := strings.Split(statusString, "\n")
+	return lines[0]
 }
 
 func (jj *Jujutsu) shouldDisplay(displayStatus bool) bool {
@@ -103,8 +113,7 @@ func (jj *Jujutsu) setDir(dir string) {
 }
 
 func (jj *Jujutsu) setJujutsuStatus() {
-	// https://jj-vcs.github.io/jj/latest/templates/#commit-keywords
-	statusString, err := jj.getJujutsuCommandOutput("log", "-r", "@", "--no-graph", "-T", jjLogTemplate)
+	statusString, err := jj.getJujutsuCommandOutput("log", "-r", "@", "--no-graph", "-T", jj.logTemplate())
 	if err != nil {
 		return
 	}
@@ -119,10 +128,15 @@ func (jj *Jujutsu) setJujutsuStatus() {
 	}
 }
 
+func (jj *Jujutsu) logTemplate() string {
+	// https://jj-vcs.github.io/jj/latest/templates/#commit-keywords
+	return fmt.Sprintf(`change_id.shortest(%d) ++ "\n" ++ diff.summary()`, jj.options.Int(ChangeIDMinLen, 0))
+}
+
 func (jj *Jujutsu) getJujutsuCommandOutput(command string, args ...string) (string, error) {
 	cli := []string{"--repository", jj.repoRootDir, "--no-pager", "--color", "never"}
 
-	if jj.props.GetBool(IgnoreWorkingCopy, true) {
+	if jj.options.Bool(IgnoreWorkingCopy, true) {
 		cli = append(cli, "--ignore-working-copy")
 	}
 

@@ -5,11 +5,11 @@ import (
 	"path/filepath"
 
 	"github.com/jandedobbeleer/oh-my-posh/src/log"
-	"gopkg.in/yaml.v3"
+	yaml "go.yaml.in/yaml/v3"
 )
 
 type TalosCTL struct {
-	base
+	Base
 
 	Context string `yaml:"context"`
 }

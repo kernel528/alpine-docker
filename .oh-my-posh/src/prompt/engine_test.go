@@ -92,10 +92,96 @@ func TestPrintPWD(t *testing.T) {
 		env.On("User").Return("user")
 		env.On("Shell").Return(tc.Shell)
 		env.On("IsCygwin").Return(tc.Cygwin)
+		env.On("IsWsl").Return(false)
 		env.On("Host").Return("host", nil)
 
 		template.Cache = &cache.Template{
-			Shell:    tc.Shell,
+			SimpleTemplate: cache.SimpleTemplate{
+				Shell: tc.Shell,
+			},
+			Segments: maps.NewConcurrent[any](),
+		}
+		template.Init(env, nil, nil)
+
+		terminal.Init(shell.GENERIC)
+
+		engine := &Engine{
+			Env: env,
+			Config: &config.Config{
+				PWD: tc.Config,
+			},
+		}
+
+		engine.pwd()
+		got := engine.string()
+
+		assert.Equal(t, tc.Expected, got, tc.Case)
+	}
+}
+
+func TestPrintPWDWSL(t *testing.T) {
+	cases := []struct {
+		Case     string
+		Expected string
+		Config   string
+		Pwd      string
+		Shell    string
+		WinPath  string
+		IsWsl    bool
+	}{
+		{
+			Case:     "OSC99 WSL",
+			Pwd:      "/home/user/projects",
+			Config:   terminal.OSC99,
+			IsWsl:    true,
+			WinPath:  "//wsl.localhost/Ubuntu/home/user/projects",
+			Expected: "\x1b]9;9;//wsl.localhost/Ubuntu/home/user/projects\x1b\\",
+		},
+		{
+			Case:     "OSC99 Not WSL",
+			Pwd:      "/home/user/projects",
+			Config:   terminal.OSC99,
+			IsWsl:    false,
+			Expected: "\x1b]9;9;/home/user/projects\x1b\\",
+		},
+		{
+			Case:     "OSC7 WSL (with conversion)",
+			Pwd:      "/home/user/projects",
+			Config:   terminal.OSC7,
+			IsWsl:    true,
+			WinPath:  "//wsl.localhost/Ubuntu/home/user/projects",
+			Expected: "\x1b]7;file://host///wsl.localhost/Ubuntu/home/user/projects\x1b\\",
+		},
+		{
+			Case:     "OSC51 WSL (with conversion)",
+			Pwd:      "/home/user/projects",
+			Config:   terminal.OSC51,
+			IsWsl:    true,
+			WinPath:  "//wsl.localhost/Ubuntu/home/user/projects",
+			Expected: "\x1b]51;Auser@host://wsl.localhost/Ubuntu/home/user/projects\x1b\\",
+		},
+	}
+
+	for _, tc := range cases {
+		env := new(mock.Environment)
+		env.On("Pwd").Return(tc.Pwd)
+		env.On("User").Return("user")
+		env.On("Shell").Return(tc.Shell)
+		env.On("IsCygwin").Return(false)
+		env.On("IsWsl").Return(tc.IsWsl)
+		env.On("Host").Return("host", nil)
+
+		if tc.IsWsl {
+			if tc.WinPath == "" {
+				tc.WinPath = tc.Pwd
+			}
+			env.On("ConvertToWindowsPath", tc.Pwd).Return(tc.WinPath)
+		}
+
+		template.Cache = &cache.Template{
+			SimpleTemplate: cache.SimpleTemplate{
+				Shell: tc.Shell,
+			},
 			Segments: maps.NewConcurrent[any](),
 		}
 		template.Init(env, nil, nil)
@@ -123,12 +209,10 @@ func BenchmarkEngineRender(b *testing.B) {
 }
 
 func engineRender() {
-	cfg, _ := config.Load("", false)
+	cfg := config.Load("")
 
 	env := &runtime.Terminal{}
 	env.Init(nil)
-
-	defer env.Close()
 
 	template.Cache = &cache.Template{
 		Segments: maps.NewConcurrent[any](),
@@ -193,12 +277,14 @@ func TestGetTitle(t *testing.T) {
 		terminal.Init(shell.GENERIC)
 
 		template.Cache = &cache.Template{
-			Shell:    tc.ShellName,
-			UserName: "MyUser",
-			Root:     tc.Root,
-			HostName: "MyHost",
-			PWD:      tc.Cwd,
-			Folder:   "vagrant",
+			SimpleTemplate: cache.SimpleTemplate{
+				Shell:    tc.ShellName,
+				UserName: "MyUser",
+				Root:     tc.Root,
+				HostName: "MyHost",
+				PWD:      tc.Cwd,
+				Folder:   "vagrant",
+			},
 			Segments: maps.NewConcurrent[any](),
 		}
 		template.Init(env, nil, nil)
@@ -257,10 +343,12 @@ func TestGetConsoleTitleIfGethostnameReturnsError(t *testing.T) {
 		terminal.Init(shell.GENERIC)
 
 		template.Cache = &cache.Template{
-			Shell:    tc.ShellName,
-			UserName: "MyUser",
-			Root:     tc.Root,
-			HostName: "",
+			SimpleTemplate: cache.SimpleTemplate{
+				Shell:    tc.ShellName,
+				UserName: "MyUser",
+				Root:     tc.Root,
+				HostName: "",
+			},
 			Segments: maps.NewConcurrent[any](),
 		}
 		template.Init(env, nil, nil)
@@ -372,7 +460,9 @@ func TestShouldFill(t *testing.T) {
 		}
 
 		template.Cache = &cache.Template{
-			Shell:    shell.GENERIC,
+			SimpleTemplate: cache.SimpleTemplate{
+				Shell: shell.GENERIC,
+			},
 			Segments: maps.NewConcurrent[any](),
 		}
 		template.Init(env, nil, nil)
