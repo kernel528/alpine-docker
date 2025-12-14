@@ -3,8 +3,9 @@ package segments
 import (
 	"net"
 
-	"github.com/jandedobbeleer/oh-my-posh/src/properties"
+	"github.com/jandedobbeleer/oh-my-posh/src/cache"
 	"github.com/jandedobbeleer/oh-my-posh/src/runtime/http"
+	"github.com/jandedobbeleer/oh-my-posh/src/segments/options"
 )
 
 type ipData struct {
@@ -25,7 +26,7 @@ func (i *ipAPI) Get() (*ipData, error) {
 }
 
 type IPify struct {
-	base
+	Base
 
 	api IPAPI
 	IP  string
@@ -40,13 +41,24 @@ func (i *IPify) Template() string {
 }
 
 func (i *IPify) Enabled() bool {
+	const key = "IP"
+
+	if ip, ok := cache.Get[string](cache.Device, key); ok {
+		i.IP = ip
+		return true
+	}
+
 	i.initAPI()
 
 	ip, err := i.getResult()
 	if err != nil {
 		return false
 	}
+
 	i.IP = ip
+
+	duration := i.options.String(options.CacheDuration, string(cache.ONEDAY))
+	cache.Set(cache.Device, key, i.IP, cache.Duration(duration))
 
 	return true
 }
@@ -71,7 +83,7 @@ func (i *IPify) initAPI() {
 
 	request := &http.Request{
 		Env:         i.env,
-		HTTPTimeout: i.props.GetInt(properties.HTTPTimeout, properties.DefaultHTTPTimeout),
+		HTTPTimeout: i.options.Int(options.HTTPTimeout, options.DefaultHTTPTimeout),
 	}
 
 	i.api = &ipAPI{

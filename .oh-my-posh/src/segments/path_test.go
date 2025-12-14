@@ -5,9 +5,9 @@ import (
 	"testing"
 
 	"github.com/jandedobbeleer/oh-my-posh/src/cache"
-	"github.com/jandedobbeleer/oh-my-posh/src/properties"
 	"github.com/jandedobbeleer/oh-my-posh/src/runtime"
 	"github.com/jandedobbeleer/oh-my-posh/src/runtime/mock"
+	"github.com/jandedobbeleer/oh-my-posh/src/segments/options"
 	"github.com/jandedobbeleer/oh-my-posh/src/shell"
 	"github.com/jandedobbeleer/oh-my-posh/src/template"
 
@@ -60,7 +60,7 @@ func TestParent(t *testing.T) {
 		env.On("PathSeparator").Return(tc.PathSeparator)
 		env.On("GOOS").Return(tc.GOOS)
 
-		props := properties.Map{
+		props := options.Map{
 			FolderSeparatorIcon: tc.FolderSeparatorIcon,
 		}
 
@@ -120,9 +120,9 @@ func TestAgnosterPathStyles(t *testing.T) {
 			env.On("RunCommand", "cygpath", testify_.Anything).Return("brrrr", nil)
 		}
 
-		props := properties.Map{
+		props := options.Map{
 			FolderSeparatorIcon: tc.FolderSeparatorIcon,
-			properties.Style:    tc.Style,
+			options.Style:       tc.Style,
 			MaxDepth:            tc.MaxDepth,
 			MaxWidth:            tc.MaxWidth,
 			HideRootLocation:    tc.HideRootLocation,
@@ -178,8 +178,8 @@ func TestFullAndFolderPath(t *testing.T) {
 		if tc.Template == "" {
 			tc.Template = "{{ if gt .StackCount 0 }}{{ .StackCount }} {{ end }}{{ .Path }}"
 		}
-		props := properties.Map{
-			properties.Style: tc.Style,
+		props := options.Map{
+			options.Style: tc.Style,
 		}
 		if tc.FolderSeparatorIcon != "" {
 			props[FolderSeparatorIcon] = tc.FolderSeparatorIcon
@@ -236,8 +236,8 @@ func TestFullPathCustomMappedLocations(t *testing.T) {
 		template.Cache = new(cache.Template)
 		template.Init(env, nil, nil)
 
-		props := properties.Map{
-			properties.Style:       Full,
+		props := options.Map{
+			options.Style:          Full,
 			MappedLocationsEnabled: false,
 			MappedLocations:        tc.MappedLocations,
 		}
@@ -277,8 +277,8 @@ func TestAgnosterPath(t *testing.T) {
 		env.On("Flags").Return(args)
 		env.On("Shell").Return(shell.PWSH)
 
-		props := properties.Map{
-			properties.Style:     Agnoster,
+		props := options.Map{
+			options.Style:        Agnoster,
 			FolderSeparatorIcon:  " > ",
 			FolderIcon:           "f",
 			HomeIcon:             "~",
@@ -318,8 +318,8 @@ func TestAgnosterLeftPath(t *testing.T) {
 		env.On("Flags").Return(args)
 		env.On("Shell").Return(shell.PWSH)
 
-		props := properties.Map{
-			properties.Style:    AgnosterLeft,
+		props := options.Map{
+			options.Style:       AgnosterLeft,
 			FolderSeparatorIcon: " > ",
 			FolderIcon:          "f",
 			HomeIcon:            "~",
@@ -354,11 +354,13 @@ func TestGetFolderSeparator(t *testing.T) {
 		env.On("Shell").Return(shell.GENERIC)
 
 		template.Cache = &cache.Template{
-			Shell: "bash",
+			SimpleTemplate: cache.SimpleTemplate{
+				Shell: "bash",
+			},
 		}
 		template.Init(env, nil, nil)
 
-		props := properties.Map{}
+		props := options.Map{}
 
 		if len(tc.FolderSeparatorTemplate) > 0 {
 			props[FolderSeparatorTemplate] = tc.FolderSeparatorTemplate
@@ -401,7 +403,7 @@ func TestNormalizePath(t *testing.T) {
 		env.On("PathSeparator").Return(tc.PathSeparator)
 
 		pt := &Path{cygPath: tc.Cygwin}
-		pt.Init(properties.Map{}, env)
+		pt.Init(options.Map{}, env)
 
 		got := pt.normalize(tc.Input)
 		assert.Equal(t, tc.Expected, got, tc.Case)
@@ -426,7 +428,7 @@ func TestSplitPath(t *testing.T) {
 		env.On("HasParentFilePath", ".git", false).Return(tc.GitDir, nil)
 		env.On("GOOS").Return(tc.GOOS)
 
-		props := properties.Map{
+		props := options.Map{
 			GitDirFormat: tc.GitDirFormat,
 		}
 
@@ -478,7 +480,7 @@ func TestGetMaxWidth(t *testing.T) {
 		template.Cache = new(cache.Template)
 		template.Init(env, nil, nil)
 
-		props := properties.Map{
+		props := options.Map{
 			MaxWidth: tc.MaxWidth,
 		}
 
@@ -639,9 +641,9 @@ func TestAgnosterMaxWidth(t *testing.T) {
 			env.On("Shell").Return(shell.BASH)
 
 			path := &Path{
-				base: base{
+				Base: Base{
 					env: env,
-					props: properties.Map{
+					options: options.Map{
 						DisplayRoot:         tc.displayRoot,
 						FolderIcon:          tc.folderIcon,
 						FolderSeparatorIcon: tc.separator,
@@ -789,6 +791,38 @@ func TestFishPath(t *testing.T) {
 			expected:       "a/b/c",
 			separator:      "/",
 		},
+		{
+			name:           "multi-byte unicode home icon",
+			pwd:            "/󰋜/Downloads/test",
+			dirLength:      1,
+			fullLengthDirs: 1,
+			expected:       "󰋜/D/test",
+			separator:      "/",
+		},
+		{
+			name:           "multi-byte unicode home icon with dir length 2",
+			pwd:            "/󰋜/Documents/Projects",
+			dirLength:      2,
+			fullLengthDirs: 1,
+			expected:       "󰋜/Do/Projects",
+			separator:      "/",
+		},
+		{
+			name:           "path with emoji folders",
+			pwd:            "/🏠/📁/💻",
+			dirLength:      1,
+			fullLengthDirs: 1,
+			expected:       "🏠/📁/💻",
+			separator:      "/",
+		},
+		{
+			name:           "mixed multi-byte and ascii",
+			pwd:            "/󰋜test/normal/󰨳end",
+			dirLength:      2,
+			fullLengthDirs: 1,
+			expected:       "󰋜t/no/󰨳end",
+			separator:      "/",
+		},
 	}
 
 	for _, tc := range cases {
@@ -800,9 +834,9 @@ func TestFishPath(t *testing.T) {
 			env.On("Shell").Return(shell.BASH)
 
 			path := &Path{
-				base: base{
+				Base: Base{
 					env: env,
-					props: properties.Map{
+					options: options.Map{
 						DirLength:      tc.dirLength,
 						FullLengthDirs: tc.fullLengthDirs,
 					},

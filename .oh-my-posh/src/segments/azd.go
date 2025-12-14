@@ -9,12 +9,11 @@ import (
 )
 
 type Azd struct {
-	base
-
-	azdConfig
+	Base
+	AzdConfig
 }
 
-type azdConfig struct {
+type AzdConfig struct {
 	DefaultEnvironment string `json:"defaultEnvironment"`
 	Version            int    `json:"version"`
 }
@@ -26,7 +25,7 @@ func (t *Azd) Template() string {
 func (t *Azd) Enabled() bool {
 	var parentFilePath string
 
-	folders := t.props.GetStringArray(LanguageFolders, []string{".azure"})
+	folders := t.options.StringArray(LanguageFolders, []string{".azure"})
 	for _, folder := range folders {
 		if file, err := t.env.HasParentFilePath(folder, false); err == nil {
 			parentFilePath = file.ParentFolder
@@ -61,11 +60,11 @@ func (t *Azd) TryReadConfigJSON(file string) bool {
 	}
 
 	content := t.env.FileContent(file)
-	var config azdConfig
+	var config AzdConfig
 	if err := json.Unmarshal([]byte(content), &config); err != nil {
 		return false
 	}
 
-	t.azdConfig = config
+	t.AzdConfig = config
 	return true
 }

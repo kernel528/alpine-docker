@@ -4,28 +4,28 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jandedobbeleer/oh-my-posh/src/properties"
 	"github.com/jandedobbeleer/oh-my-posh/src/regex"
+	"github.com/jandedobbeleer/oh-my-posh/src/segments/options"
 )
 
 type Node struct {
 	PackageManagerIcon string
 	PackageManagerName string
 
-	language
+	Language
 }
 
 const (
 	// PnpmIcon illustrates PNPM is used
-	PnpmIcon properties.Property = "pnpm_icon"
+	PnpmIcon options.Option = "pnpm_icon"
 	// YarnIcon illustrates Yarn is used
-	YarnIcon properties.Property = "yarn_icon"
+	YarnIcon options.Option = "yarn_icon"
 	// NPMIcon illustrates NPM is used
-	NPMIcon properties.Property = "npm_icon"
+	NPMIcon options.Option = "npm_icon"
 	// BunIcon illustrates Bun is used
-	BunIcon properties.Property = "bun_icon"
+	BunIcon options.Option = "bun_icon"
 	// FetchPackageManager shows if Bun, NPM, PNPM, or Yarn is used
-	FetchPackageManager properties.Property = "fetch_package_manager"
+	FetchPackageManager options.Option = "fetch_package_manager"
 )
 
 func (n *Node) Template() string {
@@ -42,21 +42,21 @@ func (n *Node) Enabled() bool {
 		},
 	}
 	n.versionURLTemplate = "https://github.com/nodejs/node/blob/master/doc/changelogs/CHANGELOG_V{{ .Major }}.md#{{ .Full }}"
-	n.language.matchesVersionFile = n.matchesVersionFile
-	n.language.loadContext = n.loadContext
+	n.Language.matchesVersionFile = n.matchesVersionFile
+	n.Language.loadContext = n.loadContext
 
-	return n.language.Enabled()
+	return n.Language.Enabled()
 }
 
 func (n *Node) loadContext() {
-	if !n.props.GetBool(FetchPackageManager, false) {
+	if !n.options.Bool(FetchPackageManager, false) {
 		return
 	}
 
 	packageManagerDefinitions := []struct {
 		fileName     string
 		name         string
-		iconProperty properties.Property
+		iconProperty options.Option
 		defaultIcon  string
 	}{
 		{
@@ -100,7 +100,7 @@ func (n *Node) loadContext() {
 	for _, pm := range packageManagerDefinitions {
 		if n.env.HasFiles(pm.fileName) {
 			n.PackageManagerName = pm.name
-			n.PackageManagerIcon = n.props.GetString(pm.iconProperty, pm.defaultIcon)
+			n.PackageManagerIcon = n.options.String(pm.iconProperty, pm.defaultIcon)
 			break
 		}
 	}

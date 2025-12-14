@@ -1,17 +1,15 @@
 package segments
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/jandedobbeleer/oh-my-posh/src/build"
-	cache_ "github.com/jandedobbeleer/oh-my-posh/src/cache/mock"
+	"github.com/jandedobbeleer/oh-my-posh/src/cache"
 	"github.com/jandedobbeleer/oh-my-posh/src/cli/upgrade"
-	"github.com/jandedobbeleer/oh-my-posh/src/properties"
 	"github.com/jandedobbeleer/oh-my-posh/src/runtime/mock"
+	"github.com/jandedobbeleer/oh-my-posh/src/segments/options"
 
 	"github.com/alecthomas/assert"
-	testify_ "github.com/stretchr/testify/mock"
 )
 
 func TestUpgrade(t *testing.T) {
@@ -63,24 +61,28 @@ func TestUpgrade(t *testing.T) {
 
 	for _, tc := range cases {
 		env := new(mock.Environment)
-		cache := &cache_.Cache{}
 
-		env.On("Cache").Return(cache)
 		if tc.CachedVersion == "" {
 			tc.CachedVersion = tc.CurrentVersion
 		}
 
-		cacheData := fmt.Sprintf(`{"latest":"%s", "current": "%s"}`, tc.LatestVersion, tc.CachedVersion)
-		cache.On("Get", UPGRADECACHEKEY).Return(cacheData, tc.HasCache)
-		cache.On("Set", testify_.Anything, testify_.Anything, testify_.Anything)
+		if tc.HasCache {
+			data := &UpgradeCache{
+				Latest:  tc.LatestVersion,
+				Current: tc.CachedVersion,
+			}
+			cache.Set(cache.Device, UPGRADECACHEKEY, data, cache.INFINITE)
+		}
 
 		build.Version = tc.CurrentVersion
 
 		ug := &Upgrade{}
-		ug.Init(properties.Map{}, env)
+		ug.Init(options.Map{}, env)
 
 		enabled := ug.Enabled()
 
 		assert.Equal(t, tc.ExpectedEnabled, enabled, tc.Case)
+
+		cache.DeleteAll(cache.Device)
 	}
 }

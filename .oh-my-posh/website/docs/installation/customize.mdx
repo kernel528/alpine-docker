@@ -14,16 +14,16 @@ line in your `profile` or `.<shell>rc` script (see [prompt][prompt]).
 
 These are the three possible values the `--config` flag can handle:
 
-- a pointer to a theme, without the extensions
-
-  ```powershell
-  --config 'jandedobbeleer'
-  ```
-
 - a path to a local configuration file
 
   ```powershell
   --config 'C:/Users/Posh/myconfig.omp.json'
+  ```
+
+- a pointer to a theme, without the extensions
+
+  ```powershell
+  --config 'jandedobbeleer'
   ```
 
 - a URL pointing to a remote config
@@ -32,12 +32,19 @@ These are the three possible values the `--config` flag can handle:
   --config 'https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/jandedobbeleer.omp.json'
   ```
 
+:::info
+Using a theme name (like `jandedobbeleer`) or a remote URL requires an active internet connection
+and will download the configuration on shell start. Caching is in place, but for better performance,
+it's recommended to use a local configuration file.
+:::
+
 ### Set the configuration
 
-The example below use a local path to the [jandedobbeleer][jandedobbeleer] theme, adjust the `--config` value
+The example below uses a local path to the [jandedobbeleer][jandedobbeleer] theme, adjust the `--config` value
 to reflect your configuration file, local or remote.
 
 <Tabs
+  queryString="shell"
   defaultValue="powershell"
   groupId="shell"
   values={[
@@ -107,7 +114,8 @@ exec elvish
 <TabItem value="fish">
 
 :::caution
-It is recommended to use the latest version of Fish. Versions below 3.1.2 have issues displaying the prompt.
+It is recommended to use the latest version of Fish. Versions below 4.1.0 have issues and do not support [transient prompt].
+
 :::
 
 Adjust the Oh My Posh init line in `~/.config/fish/config.fish` by adding the `--config` flag with
@@ -260,3 +268,4 @@ segments section covers how to configure each available segment.
 [json-schema]: https://raw.githubusercontent.com/JanDeDobbeleer/oh-my-posh/main/themes/schema.json
 [homebrew-problem]: https://github.com/JanDeDobbeleer/oh-my-posh/discussions/2644
 [sign]: https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_signing?view=powershell-7.3#methods-of-signing-scripts
+[transient prompt]: /docs/configuration/transient

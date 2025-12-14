@@ -6,14 +6,17 @@ import (
 	"path/filepath"
 	"slices"
 
-	"github.com/jandedobbeleer/oh-my-posh/src/properties"
-
 	"github.com/hashicorp/hcl/v2/gohcl"
 	"github.com/hashicorp/hcl/v2/hclparse"
+	"github.com/jandedobbeleer/oh-my-posh/src/segments/options"
+)
+
+const (
+	Command options.Option = "command"
 )
 
 type Terraform struct {
-	base
+	Base
 
 	TerraformBlock
 	WorkspaceName string
@@ -32,8 +35,8 @@ type TerraformBlock struct {
 }
 
 func (tf *Terraform) Enabled() bool {
-	cmd := "terraform"
-	fetchVersion := tf.props.GetBool(properties.FetchVersion, false)
+	cmd := tf.options.String(Command, "terraform")
+	fetchVersion := tf.options.Bool(options.FetchVersion, false)
 
 	if !tf.env.HasCommand(cmd) || !tf.inContext(fetchVersion) {
 		return false

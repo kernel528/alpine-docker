@@ -8,14 +8,15 @@ import (
 	"path/filepath"
 
 	"github.com/jandedobbeleer/oh-my-posh/src/log"
-	"github.com/jandedobbeleer/oh-my-posh/src/properties"
 	"github.com/jandedobbeleer/oh-my-posh/src/runtime/path"
-	"gopkg.in/yaml.v3"
+	"github.com/jandedobbeleer/oh-my-posh/src/segments/options"
+
+	yaml "go.yaml.in/yaml/v3"
 )
 
 const (
-	FetchStack properties.Property = "fetch_stack"
-	FetchAbout properties.Property = "fetch_about"
+	FetchStack options.Option = "fetch_stack"
+	FetchAbout options.Option = "fetch_about"
 
 	JSON string = "json"
 	YAML string = "yaml"
@@ -25,17 +26,17 @@ const (
 )
 
 type Pulumi struct {
-	base
+	Base
 
 	Stack string
 	Name  string
 
 	workspaceSHA1 string
 
-	backend
+	Backend
 }
 
-type backend struct {
+type Backend struct {
 	URL  string `json:"url"`
 	User string `json:"user"`
 }
@@ -63,11 +64,11 @@ func (p *Pulumi) Enabled() bool {
 		return false
 	}
 
-	if p.props.GetBool(FetchStack, false) {
+	if p.options.Bool(FetchStack, false) {
 		p.getPulumiStackName()
 	}
 
-	if p.props.GetBool(FetchAbout, false) {
+	if p.options.Bool(FetchAbout, false) {
 		p.getPulumiAbout()
 	}
 
@@ -168,7 +169,7 @@ func (p *Pulumi) getPulumiAbout() {
 	}
 
 	var about struct {
-		Backend *backend `json:"backend"`
+		Backend *Backend `json:"backend"`
 	}
 
 	err = json.Unmarshal([]byte(aboutOutput), &about)
@@ -182,5 +183,5 @@ func (p *Pulumi) getPulumiAbout() {
 		return
 	}
 
-	p.backend = *about.Backend
+	p.Backend = *about.Backend
 }

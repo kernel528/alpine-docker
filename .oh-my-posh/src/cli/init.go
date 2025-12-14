@@ -2,9 +2,11 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/jandedobbeleer/oh-my-posh/src/cache"
 	"github.com/jandedobbeleer/oh-my-posh/src/config"
 	"github.com/jandedobbeleer/oh-my-posh/src/log"
 	"github.com/jandedobbeleer/oh-my-posh/src/runtime"
@@ -61,7 +63,7 @@ See the documentation to initialize your shell: https://ohmyposh.dev/docs/instal
 	initCmd.Flags().BoolVarP(&printOutput, "print", "p", false, "print the init script")
 	initCmd.Flags().BoolVarP(&strict, "strict", "s", false, "run in strict mode")
 	initCmd.Flags().BoolVar(&debug, "debug", false, "enable/disable debug mode")
-	initCmd.Flags().BoolVar(&eval, "eval", false, "output the prompt for eval")
+	initCmd.Flags().BoolVar(&eval, "eval", false, "output the full init script for eval")
 
 	_ = initCmd.MarkPersistentFlagRequired("config")
 
@@ -69,20 +71,32 @@ See the documentation to initialize your shell: https://ohmyposh.dev/docs/instal
 }
 
 func runInit(sh, command string) {
+	if os.Getenv("CURSOR_AGENT") == "1" {
+		log.Errorf("oh-my-posh init is disabled when running inside Cursor agent mode")
+		return
+	}
+
 	if debug {
 		log.Enable(plain)
 	}
 
-	cfg, hash := config.Load(configFlag, false)
+	if sh == "powershell" {
+		sh = shell.PWSH
+	}
+
+	initCache(sh)
+
+	cfg := config.Load(configFlag)
 
 	flags := &runtime.Flags{
-		Shell:     sh,
-		Config:    cfg.Source,
-		Strict:    strict,
-		Debug:     debug,
-		SaveCache: true,
-		Init:      true,
-		Eval:      eval,
+		Shell:      sh,
+		ConfigPath: cfg.Source,
+		ConfigHash: cfg.Hash(),
+		Strict:     strict,
+		Debug:      debug,
+		Init:       true,
+		Eval:       eval,
+		Plain:      plain,
 	}
 
 	env := &runtime.Terminal{}
@@ -91,13 +105,15 @@ func runInit(sh, command string) {
 	template.Init(env, cfg.Var, cfg.Maps)
 
 	defer func() {
-		cfg.Store(env.Session())
+		cfg.Store()
 		template.SaveCache()
-		env.Close()
+		if err := cache.Clear(false, shell.InitScriptName(env.Flags())); err != nil {
+			log.Error(err)
+		}
+		cache.Close()
 	}()
 
 	feats := cfg.Features(env)
-	flags.ConfigHash = fmt.Sprintf("%s.%s", hash, feats.Hash())
 
 	var output string
 
@@ -108,20 +124,13 @@ func runInit(sh, command string) {
 		output = shell.Init(env, feats)
 	}
 
-	if !debug {
-		configDSC := config.DSC()
-		configDSC.Load(env.Cache())
-		configDSC.Add(configFlag)
-		configDSC.Save()
-
-		shellDSC := shell.DSC()
-		shellDSC.Load(env.Cache())
-		shellDSC.Add(&shell.Shell{
-			Command: command,
-			Name:    sh,
-		})
-		shellDSC.Save()
-	}
+	shellDSC := shell.DSC()
+	shellDSC.Load()
+	shellDSC.Add(&shell.Shell{
+		Command: command,
+		Name:    sh,
+	})
+	shellDSC.Save()
 
 	if silent {
 		return
@@ -161,4 +170,18 @@ func getFullCommand(cmd *cobra.Command, args []string) string {
 	})
 
 	return cmdPath
+}
+
+func initCache(sh string) {
+	switch {
+	case !printOutput:
+		if (eval && sh == shell.PWSH) || sh == shell.ELVISH {
+			cache.Init(sh)
+			return
+		}
+
+		fallthrough
+	default:
+		cache.Init(sh, cache.NewSession, cache.Persist)
+	}
 }

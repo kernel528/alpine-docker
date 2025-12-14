@@ -1,3 +1,4 @@
+//revive:disable:var-naming // package intentionally mirrors standard name for compatibility across runtime
 package http
 
 import (
@@ -41,19 +42,19 @@ type OAuthRequest struct {
 
 func (o *OAuthRequest) getAccessToken() (string, error) {
 	// get directly from cache
-	if acccessToken, OK := o.Env.Cache().Get(o.AccessTokenKey); OK && len(acccessToken) != 0 {
+	if acccessToken, OK := cache.Get[string](cache.Device, o.AccessTokenKey); OK && len(acccessToken) != 0 {
 		return acccessToken, nil
 	}
 
 	// use cached refresh token to get new access token
-	if refreshToken, OK := o.Env.Cache().Get(o.RefreshTokenKey); OK && len(refreshToken) != 0 {
+	if refreshToken, OK := cache.Get[string](cache.Device, o.RefreshTokenKey); OK && len(refreshToken) != 0 {
 		if acccessToken, err := o.refreshToken(refreshToken); err == nil {
 			return acccessToken, nil
 		}
 	}
 
 	// use initial refresh token from property
-	// refreshToken := o.props.GetString(properties.RefreshToken, "")
+	// refreshToken := o.props.GetString(options.RefreshToken, "")
 	// ignore an empty or default refresh token
 	if o.RefreshToken == "" || o.RefreshToken == DefaultRefreshToken {
 		return "", &OAuthError{
@@ -67,7 +68,6 @@ func (o *OAuthRequest) getAccessToken() (string, error) {
 }
 
 func (o *OAuthRequest) refreshToken(refreshToken string) (string, error) {
-	// httpTimeout := o.props.GetInt(properties.HTTPTimeout, properties.DefaultHTTPTimeout)
 	if o.HTTPTimeout == 0 {
 		o.HTTPTimeout = 20
 	}
@@ -90,8 +90,8 @@ func (o *OAuthRequest) refreshToken(refreshToken string) (string, error) {
 	}
 
 	// add tokens to cache
-	o.Env.Cache().Set(o.AccessTokenKey, tokens.AccessToken, cache.ToDuration(tokens.ExpiresIn))
-	o.Env.Cache().Set(o.RefreshTokenKey, tokens.RefreshToken, cache.TWOYEARS)
+	cache.Set(cache.Device, o.AccessTokenKey, tokens.AccessToken, cache.ToDuration(tokens.ExpiresIn))
+	cache.Set(cache.Device, o.RefreshTokenKey, tokens.RefreshToken, cache.TWOYEARS)
 	return tokens.AccessToken, nil
 }
 

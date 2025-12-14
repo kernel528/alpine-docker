@@ -10,11 +10,12 @@ import (
 	"github.com/jandedobbeleer/oh-my-posh/src/cache"
 	"github.com/jandedobbeleer/oh-my-posh/src/color"
 	"github.com/jandedobbeleer/oh-my-posh/src/log"
-	"github.com/jandedobbeleer/oh-my-posh/src/properties"
 	"github.com/jandedobbeleer/oh-my-posh/src/regex"
 	"github.com/jandedobbeleer/oh-my-posh/src/runtime"
+	"github.com/jandedobbeleer/oh-my-posh/src/segments/options"
 	"github.com/jandedobbeleer/oh-my-posh/src/template"
 
+	"go.yaml.in/yaml/v3"
 	c "golang.org/x/text/cases"
 	"golang.org/x/text/language"
 )
@@ -34,11 +35,14 @@ func (s *SegmentStyle) resolve(context any) SegmentStyle {
 }
 
 type Segment struct {
-	writer                 SegmentWriter
-	env                    runtime.Environment
-	Properties             properties.Map `json:"properties,omitempty" toml:"properties,omitempty" yaml:"properties,omitempty"`
-	Cache                  *cache.Config  `json:"cache,omitempty" toml:"cache,omitempty" yaml:"cache,omitempty"`
-	Alias                  string         `json:"alias,omitempty" toml:"alias,omitempty" yaml:"alias,omitempty"`
+	writer  SegmentWriter
+	env     runtime.Environment
+	Options options.Map `json:"options,omitempty" toml:"options,omitempty" yaml:"options,omitempty"`
+	// Properties is deprecated, use Options instead. This field exists for TOML backward compatibility
+	// since go-toml/v2 doesn't support custom unmarshalers. It will be migrated to Options after loading.
+	Properties             options.Map `json:"-" toml:"properties,omitempty" yaml:"-"`
+	Cache                  *Cache      `json:"cache,omitempty" toml:"cache,omitempty" yaml:"cache,omitempty"`
+	Alias                  string      `json:"alias,omitempty" toml:"alias,omitempty" yaml:"alias,omitempty"`
 	styleCache             SegmentStyle
 	name                   string
 	LeadingDiamond         string         `json:"leading_diamond,omitempty" toml:"leading_diamond,omitempty" yaml:"leading_diamond,omitempty"`
@@ -59,18 +63,78 @@ type Segment struct {
 	ExcludeFolders         []string       `json:"exclude_folders,omitempty" toml:"exclude_folders,omitempty" yaml:"exclude_folders,omitempty"`
 	IncludeFolders         []string       `json:"include_folders,omitempty" toml:"include_folders,omitempty" yaml:"include_folders,omitempty"`
 	Needs                  []string       `json:"-" toml:"-" yaml:"-"`
-	MinWidth               int            `json:"min_width,omitempty" toml:"min_width,omitempty" yaml:"min_width,omitempty"`
-	MaxWidth               int            `json:"max_width,omitempty" toml:"max_width,omitempty" yaml:"max_width,omitempty"`
 	Timeout                time.Duration  `json:"timeout,omitempty" toml:"timeout,omitempty" yaml:"timeout,omitempty"`
+	MaxWidth               int            `json:"max_width,omitempty" toml:"max_width,omitempty" yaml:"max_width,omitempty"`
+	MinWidth               int            `json:"min_width,omitempty" toml:"min_width,omitempty" yaml:"min_width,omitempty"`
 	Duration               time.Duration  `json:"-" toml:"-" yaml:"-"`
 	NameLength             int            `json:"-" toml:"-" yaml:"-"`
+	Index                  int            `json:"index,omitempty" toml:"index,omitempty" yaml:"index,omitempty"`
 	Interactive            bool           `json:"interactive,omitempty" toml:"interactive,omitempty" yaml:"interactive,omitempty"`
 	Enabled                bool           `json:"-" toml:"-" yaml:"-"`
 	Newline                bool           `json:"newline,omitempty" toml:"newline,omitempty" yaml:"newline,omitempty"`
 	InvertPowerline        bool           `json:"invert_powerline,omitempty" toml:"invert_powerline,omitempty" yaml:"invert_powerline,omitempty"`
 	Force                  bool           `json:"force,omitempty" toml:"force,omitempty" yaml:"force,omitempty"`
 	restored               bool           `json:"-" toml:"-" yaml:"-"`
-	Index                  int            `json:"index,omitempty" toml:"index,omitempty" yaml:"index,omitempty"`
+	Toggled                bool           `json:"toggled,omitempty" toml:"toggled,omitempty" yaml:"toggled,omitempty"`
+}
+
+// segmentAlias is used to avoid recursion during unmarshaling
+type segmentAlias Segment
+
+// segmentAux is a helper struct that captures the legacy 'properties' field
+type segmentAux struct {
+	Properties options.Map `json:"properties,omitempty" yaml:"properties,omitempty" toml:"properties,omitempty"`
+	*segmentAlias
+}
+
+func (segment *Segment) UnmarshalJSON(data []byte) error {
+	aux := &segmentAux{
+		segmentAlias: (*segmentAlias)(segment),
+	}
+
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+
+	// Migrate 'properties' to 'options' if present
+	if len(aux.Properties) > 0 && len(segment.Options) == 0 {
+		segment.Options = aux.Properties
+	}
+
+	return nil
+}
+
+func (segment *Segment) UnmarshalYAML(node *yaml.Node) error {
+	// Decode into a map to handle field renaming
+	var raw map[string]any
+	if err := node.Decode(&raw); err != nil {
+		return err
+	}
+
+	// If 'properties' exists and 'options' doesn't, rename it
+	if props, hasProps := raw["properties"]; hasProps {
+		if _, hasOptions := raw["options"]; !hasOptions {
+			raw["options"] = props
+			delete(raw, "properties")
+		}
+	}
+
+	// Re-encode and decode into the struct
+	modifiedNode := &yaml.Node{}
+	if err := modifiedNode.Encode(raw); err != nil {
+		return err
+	}
+
+	return modifiedNode.Decode((*segmentAlias)(segment))
+}
+
+// MigratePropertiesToOptions migrates the deprecated Properties field to Options.
+// This is needed for TOML configs since go-toml/v2 doesn't support custom unmarshalers.
+func (segment *Segment) MigratePropertiesToOptions() {
+	if len(segment.Properties) > 0 && len(segment.Options) == 0 {
+		segment.Options = segment.Properties
+		segment.Properties = nil
+	}
 }
 
 func (segment *Segment) Name() string {
@@ -224,18 +288,20 @@ func (segment *Segment) hasCache() bool {
 }
 
 func (segment *Segment) isToggled() bool {
-	toggles, OK := segment.env.Session().Get(cache.TOGGLECACHE)
-	if !OK || len(toggles) == 0 {
+	togglesMap, OK := cache.Get[map[string]bool](cache.Session, cache.TOGGLECACHE)
+	if !OK || len(togglesMap) == 0 {
 		log.Debug("no toggles found")
 		return false
 	}
 
-	list := strings.SplitSeq(toggles, ",")
-	for toggle := range list {
-		if SegmentType(toggle) == segment.Type || toggle == segment.Alias {
-			log.Debugf("segment toggled off: %s", segment.Name())
-			return true
-		}
+	segmentName := segment.Alias
+	if segmentName == "" {
+		segmentName = string(segment.Type)
+	}
+
+	if togglesMap[segmentName] {
+		log.Debugf("segment toggled off: %s", segment.Name())
+		return true
 	}
 
 	return false
@@ -247,7 +313,7 @@ func (segment *Segment) restoreCache() bool {
 	}
 
 	cacheKey := segment.cacheKey()
-	data, OK := segment.env.Session().Get(cacheKey)
+	data, OK := cache.Get[string](cache.Session, cacheKey)
 	if !OK {
 		log.Debugf("no cache found for segment: %s, key: %s", segment.Name(), cacheKey)
 		return false
@@ -279,15 +345,18 @@ func (segment *Segment) setCache() {
 		return
 	}
 
-	segment.env.Session().Set(segment.cacheKey(), string(data), segment.Cache.Duration)
+	// TODO: check if we can make segmentwriter a generic Type indicator
+	// that way we can actually get the value straight from cache.Get
+	// and marchalling is obsolete
+	cache.Set(cache.Session, segment.cacheKey(), string(data), segment.Cache.Duration)
 }
 
 func (segment *Segment) cacheKey() string {
 	format := "segment_cache_%s"
 	switch segment.Cache.Strategy {
-	case cache.Session:
+	case Session:
 		return fmt.Sprintf(format, segment.Name())
-	case cache.Folder:
+	case Folder:
 		fallthrough
 	default:
 		return fmt.Sprintf(format, strings.Join([]string{segment.Name(), segment.folderKey()}, "_"))
