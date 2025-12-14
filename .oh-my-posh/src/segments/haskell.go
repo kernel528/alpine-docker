@@ -1,17 +1,15 @@
 package segments
 
-import (
-	"github.com/jandedobbeleer/oh-my-posh/src/properties"
-)
+import "github.com/jandedobbeleer/oh-my-posh/src/segments/options"
 
 type Haskell struct {
-	language
+	Language
 
 	StackGhc bool
 }
 
 const (
-	StackGhcMode properties.Property = "stack_ghc_mode"
+	StackGhcMode options.Option = "stack_ghc_mode"
 )
 
 func (h *Haskell) Template() string {
@@ -36,7 +34,7 @@ func (h *Haskell) Enabled() bool {
 	h.commands = []*cmd{ghcCmd}
 	h.versionURLTemplate = "https://www.haskell.org/ghc/download_ghc_{{ .Major }}_{{ .Minor }}_{{ .Patch }}.html"
 
-	switch h.props.GetString(StackGhcMode, "never") {
+	switch h.options.String(StackGhcMode, "never") {
 	case "always":
 		h.commands = []*cmd{stackGhcCmd}
 		h.StackGhc = true
@@ -48,5 +46,5 @@ func (h *Haskell) Enabled() bool {
 		}
 	}
 
-	return h.language.Enabled()
+	return h.Language.Enabled()
 }

@@ -5,9 +5,9 @@ import (
 	"path"
 	"testing"
 
-	"github.com/jandedobbeleer/oh-my-posh/src/properties"
 	"github.com/jandedobbeleer/oh-my-posh/src/runtime"
 	"github.com/jandedobbeleer/oh-my-posh/src/runtime/mock"
+	"github.com/jandedobbeleer/oh-my-posh/src/segments/options"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -36,9 +36,9 @@ func TestArgocdGetConfigFromOpts(t *testing.T) {
 		env.On("Getenv", argocdOptsEnv).Return(tc.Opts)
 
 		argocd := &Argocd{
-			base: base{
-				env:   env,
-				props: properties.Map{},
+			Base: Base{
+				env:     env,
+				options: options.Map{},
 			},
 		}
 		config := argocd.getConfigFromOpts()
@@ -64,9 +64,9 @@ func TestArgocdGetConfigPath(t *testing.T) {
 		env.On("Getenv", argocdOptsEnv).Return(tc.Opts)
 
 		argocd := &Argocd{
-			base: base{
-				env:   env,
-				props: properties.Map{},
+			Base: Base{
+				env:     env,
+				options: options.Map{},
 			},
 		}
 		assert.Equal(t, tc.Expected, argocd.getConfigPath())
@@ -161,9 +161,9 @@ users:
 		env.On("FileContent", configFile).Return(tc.Config)
 
 		argocd := &Argocd{
-			base: base{
-				env:   env,
-				props: properties.Map{},
+			Base: Base{
+				env:     env,
+				options: options.Map{},
 			},
 		}
 		if len(tc.ExpectedError) > 0 {
@@ -258,7 +258,7 @@ servers:
 		env.On("Flags").Return(&runtime.Flags{})
 
 		argocd := &Argocd{}
-		argocd.Init(properties.Map{}, env)
+		argocd.Init(options.Map{}, env)
 
 		assert.Equal(t, tc.ExpectedEnabled, argocd.Enabled(), tc.Case)
 

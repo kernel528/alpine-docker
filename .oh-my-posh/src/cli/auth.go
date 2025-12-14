@@ -1,6 +1,9 @@
 package cli
 
 import (
+	"os"
+
+	"github.com/jandedobbeleer/oh-my-posh/src/cache"
 	"github.com/jandedobbeleer/oh-my-posh/src/cli/auth"
 	"github.com/jandedobbeleer/oh-my-posh/src/log"
 	"github.com/jandedobbeleer/oh-my-posh/src/runtime"
@@ -9,14 +12,16 @@ import (
 )
 
 var authCmd = &cobra.Command{
-	Use:   "auth [ytmda]",
+	Use:   "auth [service]",
 	Short: "Authenticate against a service",
 	Long: `Authenticate against a service.
 
 Available services:
 
+- copilot: GitHub Copilot API
 - ytmda: YouTube Music Desktop App (YTMDA) API`,
 	ValidArgs: []string{
+		"copilot",
 		"ytmda",
 	},
 	Args: NoArgsOrOneValidArg,
@@ -27,15 +32,25 @@ Available services:
 		}
 
 		flags := &runtime.Flags{
-			Shell:     shellName,
-			SaveCache: true,
+			Shell: os.Getenv("POSH_SHELL"),
 		}
 
 		env := &runtime.Terminal{}
 		env.Init(flags)
-		defer env.Close()
+
+		cache.Init(env.Shell(), cache.Persist)
+
+		defer func() {
+			cache.Close()
+		}()
 
 		switch args[0] {
+		case "copilot":
+			authenticator := auth.NewCopilot(env)
+			if err := auth.Run(authenticator); err != nil {
+				log.Error(err)
+				exitcode = 70
+			}
 		case "ytmda":
 			authenticator := auth.NewYtmda(env)
 			if err := auth.Run(authenticator); err != nil {

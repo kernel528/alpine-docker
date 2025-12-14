@@ -1,40 +1,40 @@
 package segments
 
 import (
-	"github.com/jandedobbeleer/oh-my-posh/src/properties"
 	"github.com/jandedobbeleer/oh-my-posh/src/runtime"
+	"github.com/jandedobbeleer/oh-my-posh/src/segments/options"
 )
 
-type base struct {
-	props properties.Properties
-	env   runtime.Environment
+type Base struct {
+	options options.Provider
+	env     runtime.Environment
 
-	Segment *Segment `json:"Segment"`
+	Segment *Segment
 }
 
 type Segment struct {
-	Text  string `json:"Text"`
-	Index int    `json:"Index"`
+	Text  string
+	Index int
 }
 
-func (b *base) Text() string {
+func (b *Base) Text() string {
 	return b.Segment.Text
 }
 
-func (b *base) SetText(text string) {
+func (b *Base) SetText(text string) {
 	b.Segment.Text = text
 }
 
-func (b *base) SetIndex(index int) {
+func (b *Base) SetIndex(index int) {
 	b.Segment.Index = index
 }
 
-func (b *base) Init(props properties.Properties, env runtime.Environment) {
+func (b *Base) Init(opts options.Provider, env runtime.Environment) {
 	b.Segment = &Segment{}
-	b.props = props
+	b.options = opts
 	b.env = env
 }
 
-func (b *base) CacheKey() (string, bool) {
+func (b *Base) CacheKey() (string, bool) {
 	return "", false
 }

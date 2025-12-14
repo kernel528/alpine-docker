@@ -4,8 +4,8 @@ import (
 	"testing"
 
 	"github.com/jandedobbeleer/oh-my-posh/src/cache"
-	"github.com/jandedobbeleer/oh-my-posh/src/properties"
 	"github.com/jandedobbeleer/oh-my-posh/src/runtime/mock"
+	"github.com/jandedobbeleer/oh-my-posh/src/segments/options"
 	"github.com/jandedobbeleer/oh-my-posh/src/shell"
 	"github.com/jandedobbeleer/oh-my-posh/src/template"
 
@@ -29,13 +29,15 @@ func TestStatusWriterEnabled(t *testing.T) {
 		env.On("StatusCodes").Return(tc.Status, "")
 		env.On("Shell").Return(shell.GENERIC)
 
-		props := properties.Map{}
+		props := options.Map{}
 		if len(tc.Template) > 0 {
 			props[StatusTemplate] = tc.Template
 		}
 
 		template.Cache = &cache.Template{
-			Code: 133,
+			SimpleTemplate: cache.SimpleTemplate{
+				Code: 133,
+			},
 		}
 		template.Init(env, nil, nil)
 
@@ -93,7 +95,7 @@ func TestFormatStatus(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		props := properties.Map{
+		props := options.Map{
 			StatusTemplate:  tc.Template,
 			StatusSeparator: tc.Separator,
 		}
@@ -105,7 +107,9 @@ func TestFormatStatus(t *testing.T) {
 		s.Init(props, env)
 
 		template.Cache = &cache.Template{
-			Code: tc.Status,
+			SimpleTemplate: cache.SimpleTemplate{
+				Code: tc.Status,
+			},
 		}
 		template.Init(env, nil, nil)
 

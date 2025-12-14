@@ -3,16 +3,21 @@ package cli
 import (
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/jandedobbeleer/oh-my-posh/src/cache"
 	"github.com/jandedobbeleer/oh-my-posh/src/config"
 	"github.com/jandedobbeleer/oh-my-posh/src/runtime/path"
 
 	"github.com/spf13/cobra"
 )
 
-var output string
+var (
+	format string
+	output string
+)
 
 // exportCmd represents the export command
 var exportCmd = &cobra.Command{
@@ -40,7 +45,16 @@ Exports the current config to "~/new_config.omp.json" (in JSON format).`,
 			return
 		}
 
-		cfg, _ := config.Load(configFlag, false)
+		cache.Init(os.Getenv("POSH_SHELL"))
+
+		err := setConfigFlag()
+		if err != nil {
+			exitcode = 666
+			fmt.Println(err.Error())
+			return
+		}
+
+		cfg := config.Load(configFlag)
 
 		validateExportFormat := func() error {
 			format = strings.ToLower(format)

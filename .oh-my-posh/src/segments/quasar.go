@@ -4,11 +4,11 @@ import (
 	"encoding/json"
 	"path/filepath"
 
-	"github.com/jandedobbeleer/oh-my-posh/src/properties"
+	"github.com/jandedobbeleer/oh-my-posh/src/segments/options"
 )
 
 const (
-	FetchDependencies properties.Property = "fetch_dependencies"
+	FetchDependencies options.Option = "fetch_dependencies"
 )
 
 type Package struct {
@@ -19,7 +19,7 @@ type Package struct {
 type Quasar struct {
 	Vite    *Package
 	AppVite *Package
-	language
+	Language
 	HasVite bool
 }
 
@@ -34,11 +34,11 @@ func (q *Quasar) Enabled() bool {
 	}
 	q.versionURLTemplate = "https://github.com/quasarframework/quasar/releases/tag/quasar-v{{ .Full }}"
 
-	if !q.language.Enabled() {
+	if !q.Language.Enabled() {
 		return false
 	}
 
-	if q.props.GetBool(FetchDependencies, false) {
+	if q.options.Bool(FetchDependencies, false) {
 		q.fetchDependencies()
 	}
 

@@ -1,3 +1,4 @@
+//revive:disable:var-naming // package intentionally mirrors standard name for compatibility across runtime
 package http
 
 import (
@@ -5,7 +6,6 @@ import (
 	"io"
 	"net/http"
 
-	"github.com/jandedobbeleer/oh-my-posh/src/cache"
 	"github.com/jandedobbeleer/oh-my-posh/src/log"
 )
 
@@ -18,12 +18,11 @@ type Request struct {
 
 type Environment interface {
 	HTTPRequest(url string, body io.Reader, timeout int, requestModifiers ...RequestModifier) ([]byte, error)
-	Cache() cache.Cache
 }
 
 func Do[a any](r *Request, url string, body io.Reader, requestModifiers ...RequestModifier) (a, error) {
 	var data a
-	httpTimeout := r.HTTPTimeout // r.props.GetInt(properties.HTTPTimeout, properties.DefaultHTTPTimeout)
+	httpTimeout := r.HTTPTimeout // r.props.GetInt(options.HTTPTimeout, options.DefaultHTTPTimeout)
 
 	responseBody, err := r.Env.HTTPRequest(url, body, httpTimeout, requestModifiers...)
 	if err != nil {

@@ -1,11 +1,12 @@
 package config
 
 import (
+	"encoding/gob"
 	"errors"
 
-	"github.com/jandedobbeleer/oh-my-posh/src/properties"
 	"github.com/jandedobbeleer/oh-my-posh/src/runtime"
 	"github.com/jandedobbeleer/oh-my-posh/src/segments"
+	"github.com/jandedobbeleer/oh-my-posh/src/segments/options"
 )
 
 // SegmentType the type of segment, for more information, see the constants
@@ -18,8 +19,129 @@ type SegmentWriter interface {
 	SetText(text string)
 	SetIndex(index int)
 	Text() string
-	Init(props properties.Properties, env runtime.Environment)
+	Init(props options.Provider, env runtime.Environment)
 	CacheKey() (string, bool)
+}
+
+func init() {
+	gob.Register(&segments.Angular{})
+	gob.Register(&segments.Version{})
+	gob.Register(&segments.Argocd{})
+	gob.Register(&segments.Aurelia{})
+	gob.Register(&segments.Aws{})
+	gob.Register(&segments.Az{})
+	gob.Register(&segments.Azd{})
+	gob.Register(&segments.AzFunc{})
+	gob.Register(&segments.Battery{})
+	gob.Register(&segments.Bazel{})
+	gob.Register(&segments.Brewfather{})
+	gob.Register(&segments.Buf{})
+	gob.Register(&segments.Bun{})
+	gob.Register(&segments.CarbonIntensity{})
+	gob.Register(&segments.Cds{})
+	gob.Register(&segments.Copilot{})
+	gob.Register(&segments.Cf{})
+	gob.Register(&segments.CfTarget{})
+	gob.Register(&segments.Cmake{})
+	gob.Register(&segments.Connection{})
+	gob.Register(&segments.Crystal{})
+	gob.Register(&segments.Dart{})
+	gob.Register(&segments.Deno{})
+	gob.Register(&segments.Docker{})
+	gob.Register(&segments.Dotnet{})
+	gob.Register(&segments.Elixir{})
+	gob.Register(&segments.Executiontime{})
+	gob.Register(&segments.Status{})
+	gob.Register(&segments.Firebase{})
+	gob.Register(&segments.Flutter{})
+	gob.Register(&segments.Fortran{})
+	gob.Register(&segments.Fossil{})
+	gob.Register(&segments.FossilStatus{})
+	gob.Register(&segments.Gcp{})
+	gob.Register(&segments.Git{})
+	gob.Register(&segments.GitStatus{})
+	gob.Register(&segments.Rebase{})
+	gob.Register(&segments.User{})
+	gob.Register(&segments.Commit{})
+	gob.Register(&segments.GitVersion{})
+	gob.Register(&segments.Golang{})
+	gob.Register(&segments.Haskell{})
+	gob.Register(&segments.Helm{})
+	gob.Register(&segments.IPify{})
+	gob.Register(&segments.Java{})
+	gob.Register(&segments.HTTP{})
+	gob.Register(&segments.Jujutsu{})
+	gob.Register(&segments.JujutsuStatus{})
+	gob.Register(&segments.Julia{})
+	gob.Register(&segments.Kotlin{})
+	gob.Register(&segments.Kubectl{})
+	gob.Register(&segments.LastFM{})
+	gob.Register(&segments.Lua{})
+	gob.Register(&segments.Mercurial{})
+	gob.Register(&segments.MercurialStatus{})
+	gob.Register(&segments.Mojo{})
+	gob.Register(&segments.Mvn{})
+	gob.Register(&segments.Nba{})
+	gob.Register(&segments.Nbgv{})
+	gob.Register(&segments.Nightscout{})
+	gob.Register(&segments.NixShell{})
+	gob.Register(&segments.Nim{})
+	gob.Register(&segments.Node{})
+	gob.Register(&segments.Npm{})
+	gob.Register(&segments.Nx{})
+	gob.Register(&segments.OCaml{})
+	gob.Register(&segments.Os{})
+	gob.Register(&segments.Owm{})
+	gob.Register(&segments.Path{})
+	gob.Register(&segments.Folders{})
+	gob.Register(&segments.Perl{})
+	gob.Register(&segments.Php{})
+	gob.Register(&segments.Plastic{})
+	gob.Register(&segments.PlasticStatus{})
+	gob.Register(&segments.Pnpm{})
+	gob.Register(&segments.Project{})
+	gob.Register(&segments.Pulumi{})
+	gob.Register(&segments.Python{})
+	gob.Register(&segments.Quasar{})
+	gob.Register(&segments.Package{})
+	gob.Register(&segments.R{})
+	gob.Register(&segments.React{})
+	gob.Register(&segments.Root{})
+	gob.Register(&segments.Ruby{})
+	gob.Register(&segments.Rust{})
+	gob.Register(&segments.Sapling{})
+	gob.Register(&segments.SaplingStatus{})
+	gob.Register(&segments.Session{})
+	gob.Register(&segments.Shell{})
+	gob.Register(&segments.Sitecore{})
+	gob.Register(&segments.Spotify{})
+	gob.Register(&segments.Status{})
+	gob.Register(&segments.Strava{})
+	gob.Register(&segments.Svelte{})
+	gob.Register(&segments.Svn{})
+	gob.Register(&segments.SvnStatus{})
+	gob.Register(&segments.Swift{})
+	gob.Register(&segments.SystemInfo{})
+	gob.Register(&segments.TalosCTL{})
+	gob.Register(&segments.Tauri{})
+	gob.Register(&segments.Terraform{})
+	gob.Register(&segments.Text{})
+	gob.Register(&segments.Time{})
+	gob.Register(&segments.UI5Tooling{})
+	gob.Register(&segments.Umbraco{})
+	gob.Register(&segments.Unity{})
+	gob.Register(&segments.Upgrade{})
+	gob.Register(&segments.UpgradeCache{})
+	gob.Register(&segments.V{})
+	gob.Register(&segments.Vala{})
+	gob.Register(&segments.Wakatime{})
+	gob.Register(&segments.WindowsRegistry{})
+	gob.Register(&segments.Withings{})
+	gob.Register(&segments.XMake{})
+	gob.Register(&segments.Yarn{})
+	gob.Register(&segments.Ytm{})
+	gob.Register(&segments.Zig{})
+	gob.Register(&segments.Segment{})
 }
 
 const (
@@ -65,10 +187,10 @@ const (
 	CFTARGET SegmentType = "cftarget"
 	// CMAKE writes the active cmake version
 	CMAKE SegmentType = "cmake"
-	// CMD writes the output of a shell command
-	CMD SegmentType = "command"
 	// CONNECTION writes a connection's information
 	CONNECTION SegmentType = "connection"
+	// COPILOT writes GitHub Copilot usage statistics
+	COPILOT SegmentType = "copilot"
 	// CRYSTAL writes the active crystal version
 	CRYSTAL SegmentType = "crystal"
 	// DART writes the active dart version
@@ -259,8 +381,8 @@ var Segments = map[SegmentType]func() SegmentWriter{
 	CF:              func() SegmentWriter { return &segments.Cf{} },
 	CFTARGET:        func() SegmentWriter { return &segments.CfTarget{} },
 	CMAKE:           func() SegmentWriter { return &segments.Cmake{} },
-	CMD:             func() SegmentWriter { return &segments.Cmd{} },
 	CONNECTION:      func() SegmentWriter { return &segments.Connection{} },
+	COPILOT:         func() SegmentWriter { return &segments.Copilot{} },
 	CRYSTAL:         func() SegmentWriter { return &segments.Crystal{} },
 	DART:            func() SegmentWriter { return &segments.Dart{} },
 	DENO:            func() SegmentWriter { return &segments.Deno{} },
@@ -350,8 +472,8 @@ var Segments = map[SegmentType]func() SegmentWriter{
 func (segment *Segment) MapSegmentWithWriter(env runtime.Environment) error {
 	segment.env = env
 
-	if segment.Properties == nil {
-		segment.Properties = make(properties.Map)
+	if segment.Options == nil {
+		segment.Options = make(options.Map)
 	}
 
 	f, ok := Segments[segment.Type]
@@ -360,11 +482,7 @@ func (segment *Segment) MapSegmentWithWriter(env runtime.Environment) error {
 	}
 
 	writer := f()
-	wrapper := &properties.Wrapper{
-		Properties: segment.Properties,
-	}
-
-	writer.Init(wrapper, env)
+	writer.Init(segment.Options, env)
 	segment.writer = writer
 
 	return nil

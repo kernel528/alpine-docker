@@ -1,13 +1,13 @@
 package segments
 
 type Helm struct {
-	base
+	Base
 
 	Version string
 }
 
 func (h *Helm) Enabled() bool {
-	displayMode := h.props.GetString(DisplayMode, DisplayModeAlways)
+	displayMode := h.options.String(DisplayMode, DisplayModeAlways)
 	if displayMode != DisplayModeFiles {
 		return h.getVersion()
 	}

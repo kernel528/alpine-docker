@@ -1,15 +1,13 @@
 package segments
 
-import (
-	"github.com/jandedobbeleer/oh-my-posh/src/properties"
-)
+import "github.com/jandedobbeleer/oh-my-posh/src/segments/options"
 
 type Lua struct {
-	language
+	Language
 }
 
 const (
-	PreferredExecutable properties.Property = "preferred_executable"
+	PreferredExecutable options.Option = "preferred_executable"
 )
 
 func (l *Lua) Template() string {
@@ -34,9 +32,9 @@ func (l *Lua) Enabled() bool {
 		},
 	}
 
-	if l.props.GetString(PreferredExecutable, "lua") == "luajit" {
+	if l.options.String(PreferredExecutable, "lua") == "luajit" {
 		l.commands = []*cmd{l.commands[1], l.commands[0]}
 	}
 
-	return l.language.Enabled()
+	return l.Language.Enabled()
 }
