@@ -26,11 +26,10 @@ steps:
       repo:
         from_secret: docker_repo_alpine
       tags:
-        - latest
         - '3.23'
         - '3.23-drone-build-${DRONE_BUILD_NUMBER}-amd64'
-        - '3.23.2'
-        - '3.23.2-drone-build-${DRONE_BUILD_NUMBER}-amd64'
+        - '3.23.3'
+        - '3.23.3-drone-build-${DRONE_BUILD_NUMBER}-amd64'
 
   # Slack notification
   - name: slack-notification
@@ -74,6 +73,7 @@ steps:
         from_secret: docker_repo_alpine
       tags:
         - ${DRONE_TAG}
+        - latest
 
   # Test docker image
   - name: latest-alpine-amd64-test
