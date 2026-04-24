@@ -1,7 +1,7 @@
 FROM alpine:3.23.3
 
 # Default to UTF-8 file.encoding
-ENV LANG C.UTF-8
+ENV LANG=C.UTF-8
 
 # Add common utils
 RUN apk update \
@@ -41,20 +41,19 @@ COPY .oh-my-zsh /home/joe/.oh-my-zsh
 COPY .zsh_aliases /home/joe/.zsh_aliases
 
 # Set default shell to zsh
-ENV SHELL /bin/zsh
+ENV SHELL=/bin/zsh
 
 # Add default user
 ARG USER=joe
 ARG UID=1000
 ARG GID=1000
 ARG GROUP=joe
-ARG PASSWD=joe
-RUN addgroup -g $GID $GROUP \
- && adduser -D -u $UID -G $GROUP -s /bin/zsh $USER \
- && echo "$USER:$PASSWD" | chpasswd \
+
+RUN addgroup -g "$GID" "$GROUP" \
+ && adduser -D -u "$UID" -G "$GROUP" -s /bin/zsh "$USER" \
  && echo "$USER ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers \
- && mkdir -p /home/$USER \
- && chown -R $USER:$GROUP /home/$USER
+ && mkdir -p "/home/$USER" \
+ && chown -R "$USER:$GROUP" "/home/$USER"
 
 # Set default user
 USER $USER
