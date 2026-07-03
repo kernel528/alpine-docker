@@ -50,3 +50,4 @@
 * 3.22.2 - Updated to alpine 3.22.2 release.
 * 3.23.2 - Updated to alpine 3.23.2 release.
 * 3.23.3 - Updated to alpine 3.23.3 release.
+* 3.24.1 - Updated to alpine 3.24.1 release.
