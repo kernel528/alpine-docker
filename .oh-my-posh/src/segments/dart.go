@@ -16,18 +16,19 @@ func (d *Dart) Template() string {
 func (d *Dart) Enabled() bool {
 	d.extensions = dartExtensions
 	d.folders = dartFolders
-	d.commands = []*cmd{
-		{
-			executable: "fvm",
-			args:       []string{"dart", "--version"},
-			regex:      `Dart SDK version: (?P<version>((?P<major>[0-9]+).(?P<minor>[0-9]+).(?P<patch>[0-9]+)))`,
+	d.tooling = map[string]*cmd{
+		fvmToolName: {
+			executable: fvmToolName,
+			args:       []string{dartToolName, versionFlagArg},
+			regex:      `Dart SDK version: ` + versionRegex,
 		},
-		{
-			executable: "dart",
-			args:       []string{"--version"},
-			regex:      `Dart SDK version: (?P<version>((?P<major>[0-9]+).(?P<minor>[0-9]+).(?P<patch>[0-9]+)))`,
+		dartToolName: {
+			executable: dartToolName,
+			args:       []string{versionFlagArg},
+			regex:      `Dart SDK version: ` + versionRegex,
 		},
 	}
+	d.defaultTooling = []string{fvmToolName, dartToolName}
 	d.versionURLTemplate = "https://dart.dev/guides/language/evolution#dart-{{ .Major }}{{ .Minor }}"
 
 	return d.Language.Enabled()

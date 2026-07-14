@@ -18,13 +18,10 @@ func (j *Java) Enabled() bool {
 	return j.Language.Enabled()
 }
 
+const javaToolName = "java"
+
 func (j *Java) init() {
 	javaRegex := `(?: JRE)(?: \(.*\))? \((?P<version>(?P<major>[0-9]+)(?:\.(?P<minor>[0-9]+))?(?:\.(?P<patch>[0-9]+))?).*\),`
-	javaCmd := &cmd{
-		executable: "java",
-		args:       []string{"-Xinternalversion"},
-		regex:      javaRegex,
-	}
 
 	j.extensions = []string{
 		"pom.xml",
@@ -42,19 +39,23 @@ func (j *Java) init() {
 		"*.cljc",
 	}
 
+	j.tooling = map[string]*cmd{
+		javaToolName: {
+			executable: javaToolName,
+			args:       []string{"-Xinternalversion"},
+			regex:      javaRegex,
+		},
+	}
+	j.defaultTooling = []string{javaToolName}
+
 	javaHome := j.env.Getenv("JAVA_HOME")
 	if len(javaHome) > 0 {
 		java := fmt.Sprintf("%s/bin/java", javaHome)
-		j.commands = []*cmd{
-			{
-				executable: java,
-				args:       []string{"-Xinternalversion"},
-				regex:      javaRegex,
-			},
-			javaCmd,
+		j.tooling["java_home"] = &cmd{
+			executable: java,
+			args:       []string{"-Xinternalversion"},
+			regex:      javaRegex,
 		}
-		return
+		j.defaultTooling = []string{"java_home", javaToolName}
 	}
-
-	j.commands = []*cmd{javaCmd}
 }

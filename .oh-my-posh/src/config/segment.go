@@ -12,6 +12,7 @@ import (
 	"github.com/jandedobbeleer/oh-my-posh/src/log"
 	"github.com/jandedobbeleer/oh-my-posh/src/regex"
 	"github.com/jandedobbeleer/oh-my-posh/src/runtime"
+	runjobs "github.com/jandedobbeleer/oh-my-posh/src/runtime/jobs"
 	"github.com/jandedobbeleer/oh-my-posh/src/segments/options"
 	"github.com/jandedobbeleer/oh-my-posh/src/template"
 
@@ -35,15 +36,15 @@ func (s *SegmentStyle) resolve(context any) SegmentStyle {
 }
 
 type Segment struct {
-	writer  SegmentWriter
-	env     runtime.Environment
-	Options options.Map `json:"options,omitempty" toml:"options,omitempty" yaml:"options,omitempty"`
-	// Properties is deprecated, use Options instead. This field exists for TOML backward compatibility
-	// since go-toml/v2 doesn't support custom unmarshalers. It will be migrated to Options after loading.
+	writer                 SegmentWriter
+	env                    runtime.Environment
+	Options                options.Map `json:"options,omitempty" toml:"options,omitempty" yaml:"options,omitempty"`
 	Properties             options.Map `json:"-" toml:"properties,omitempty" yaml:"-"`
 	Cache                  *Cache      `json:"cache,omitempty" toml:"cache,omitempty" yaml:"cache,omitempty"`
 	Alias                  string      `json:"alias,omitempty" toml:"alias,omitempty" yaml:"alias,omitempty"`
 	styleCache             SegmentStyle
+	foregroundCache        color.Ansi
+	backgroundCache        color.Ansi
 	name                   string
 	LeadingDiamond         string         `json:"leading_diamond,omitempty" toml:"leading_diamond,omitempty" yaml:"leading_diamond,omitempty"`
 	TrailingDiamond        string         `json:"trailing_diamond,omitempty" toml:"trailing_diamond,omitempty" yaml:"trailing_diamond,omitempty"`
@@ -56,26 +57,31 @@ type Segment struct {
 	Type                   SegmentType    `json:"type,omitempty" toml:"type,omitempty" yaml:"type,omitempty"`
 	Style                  SegmentStyle   `json:"style,omitempty" toml:"style,omitempty" yaml:"style,omitempty"`
 	LeadingPowerlineSymbol string         `json:"leading_powerline_symbol,omitempty" toml:"leading_powerline_symbol,omitempty" yaml:"leading_powerline_symbol,omitempty"`
-	ForegroundTemplates    template.List  `json:"foreground_templates,omitempty" toml:"foreground_templates,omitempty" yaml:"foreground_templates,omitempty"`
+	Placeholder            string         `json:"placeholder,omitempty" toml:"placeholder,omitempty" yaml:"placeholder,omitempty"`
 	Tips                   []string       `json:"tips,omitempty" toml:"tips,omitempty" yaml:"tips,omitempty"`
 	BackgroundTemplates    template.List  `json:"background_templates,omitempty" toml:"background_templates,omitempty" yaml:"background_templates,omitempty"`
 	Templates              template.List  `json:"templates,omitempty" toml:"templates,omitempty" yaml:"templates,omitempty"`
 	ExcludeFolders         []string       `json:"exclude_folders,omitempty" toml:"exclude_folders,omitempty" yaml:"exclude_folders,omitempty"`
 	IncludeFolders         []string       `json:"include_folders,omitempty" toml:"include_folders,omitempty" yaml:"include_folders,omitempty"`
 	Needs                  []string       `json:"-" toml:"-" yaml:"-"`
-	Timeout                time.Duration  `json:"timeout,omitempty" toml:"timeout,omitempty" yaml:"timeout,omitempty"`
-	MaxWidth               int            `json:"max_width,omitempty" toml:"max_width,omitempty" yaml:"max_width,omitempty"`
+	ForegroundTemplates    template.List  `json:"foreground_templates,omitempty" toml:"foreground_templates,omitempty" yaml:"foreground_templates,omitempty"`
+	Index                  int            `json:"index,omitempty" toml:"index,omitempty" yaml:"index,omitempty"`
 	MinWidth               int            `json:"min_width,omitempty" toml:"min_width,omitempty" yaml:"min_width,omitempty"`
 	Duration               time.Duration  `json:"-" toml:"-" yaml:"-"`
 	NameLength             int            `json:"-" toml:"-" yaml:"-"`
-	Index                  int            `json:"index,omitempty" toml:"index,omitempty" yaml:"index,omitempty"`
-	Interactive            bool           `json:"interactive,omitempty" toml:"interactive,omitempty" yaml:"interactive,omitempty"`
-	Enabled                bool           `json:"-" toml:"-" yaml:"-"`
+	MaxWidth               int            `json:"max_width,omitempty" toml:"max_width,omitempty" yaml:"max_width,omitempty"`
+	Timeout                int            `json:"timeout,omitempty" toml:"timeout,omitempty" yaml:"timeout,omitempty"`
 	Newline                bool           `json:"newline,omitempty" toml:"newline,omitempty" yaml:"newline,omitempty"`
+	Enabled                bool           `json:"-" toml:"-" yaml:"-"`
 	InvertPowerline        bool           `json:"invert_powerline,omitempty" toml:"invert_powerline,omitempty" yaml:"invert_powerline,omitempty"`
 	Force                  bool           `json:"force,omitempty" toml:"force,omitempty" yaml:"force,omitempty"`
 	restored               bool           `json:"-" toml:"-" yaml:"-"`
 	Toggled                bool           `json:"toggled,omitempty" toml:"toggled,omitempty" yaml:"toggled,omitempty"`
+	Pending                bool           `json:"-" toml:"-" yaml:"-"`
+	Interactive            bool           `json:"interactive,omitempty" toml:"interactive,omitempty" yaml:"interactive,omitempty"`
+	foregroundResolved     bool
+	backgroundResolved     bool
+	needsEvaluated         bool
 }
 
 // segmentAlias is used to avoid recursion during unmarshaling
@@ -175,7 +181,12 @@ func (segment *Segment) Execute(env runtime.Environment) {
 		return
 	}
 
-	if segment.restoreCache() {
+	if segment.restoreData() {
+		return
+	}
+
+	cacheRestored := segment.restoreCache()
+	if cacheRestored && !env.Flags().Streaming {
 		return
 	}
 
@@ -183,31 +194,39 @@ func (segment *Segment) Execute(env runtime.Environment) {
 		return
 	}
 
-	if segment.Timeout == 0 {
-		segment.Enabled = segment.writer.Enabled()
-	} else {
-		done := make(chan bool)
-		go func() {
-			segment.Enabled = segment.writer.Enabled()
-			done <- true
-		}()
-
-		select {
-		case <-done:
-			// Completed before timeout
-		case <-time.After(segment.Timeout * time.Millisecond):
-			log.Debugf("timeout after %dms for segment: %s", segment.Timeout, segment.Name())
-			return
+	defer func() {
+		if segment.Enabled {
+			template.Cache.AddSegmentData(segment.Name(), segment.writer)
 		}
+	}()
+
+	// Only segments with a timeout can ever be killed via
+	// KillGoroutineChildren (see prompt/segments.go executeSegmentWithTimeout),
+	// so only those need a Job object to track/terminate their child
+	// processes. Skipping this for the common case (no timeout configured)
+	// avoids two syscalls + a map insert per segment per prompt.
+	if segment.Timeout > 0 {
+		if err := runjobs.CreateJobForGoroutine(segment.Name()); err != nil {
+			log.Errorf("failed to create job for goroutine (segment: %s): %v", segment.Name(), err)
+		}
+
+		// Release the Job object (Windows) once this goroutine is done
+		// spawning/waiting on children. cmd.Run blocks until its child exits,
+		// so by the time Execute returns - on any path below, including a
+		// panic unwind - no process we intended to keep alive is still
+		// assigned to the job, making it safe to close despite
+		// JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE. If the timeout path already
+		// terminated/closed the job concurrently, this is a no-op; see the
+		// ownership invariant documented on jobs.CloseGoroutineJob.
+		defer runjobs.CloseGoroutineJob()
 	}
 
-	if segment.Enabled {
-		template.Cache.AddSegmentData(segment.Name(), segment.writer)
-	}
+	segment.Enabled = segment.writer.Enabled()
 }
 
 func (segment *Segment) Render(index int, force bool) bool {
-	if !segment.Enabled && !force {
+	// Allow pending segments to render (they'll show "..." text)
+	if !segment.Pending && !segment.Enabled && !force {
 		return false
 	}
 
@@ -215,14 +234,23 @@ func (segment *Segment) Render(index int, force bool) bool {
 		segment.Force = true
 	}
 
+	// Foreground/background may be overridden directly (e.g. color cycling) between
+	// render passes, so the memoized values must not survive across calls to Render.
+	segment.foregroundResolved = false
+	segment.backgroundResolved = false
+
 	segment.writer.SetIndex(index)
 
 	text := segment.string()
-	segment.Enabled = segment.Force || len(strings.ReplaceAll(text, " ", "")) > 0
 
-	if !segment.Enabled {
-		template.Cache.RemoveSegmentData(segment.Name())
-		return false
+	// Only update Enabled if segment is NOT pending (avoid race with Execute goroutine)
+	if !segment.Pending {
+		segment.Enabled = segment.Force || strings.ContainsFunc(text, func(r rune) bool { return r != ' ' })
+
+		if !segment.Enabled {
+			template.Cache.RemoveSegmentData(segment.Name())
+			return false
+		}
 	}
 
 	segment.SetText(text)
@@ -243,21 +271,35 @@ func (segment *Segment) SetText(text string) {
 }
 
 func (segment *Segment) ResolveForeground() color.Ansi {
+	if segment.foregroundResolved {
+		return segment.foregroundCache
+	}
+
 	if len(segment.ForegroundTemplates) != 0 {
 		match := segment.ForegroundTemplates.FirstMatch(segment.writer, segment.Foreground.String())
 		segment.Foreground = color.Ansi(match)
 	}
 
-	return segment.Foreground
+	segment.foregroundCache = segment.Foreground
+	segment.foregroundResolved = true
+
+	return segment.foregroundCache
 }
 
 func (segment *Segment) ResolveBackground() color.Ansi {
+	if segment.backgroundResolved {
+		return segment.backgroundCache
+	}
+
 	if len(segment.BackgroundTemplates) != 0 {
 		match := segment.BackgroundTemplates.FirstMatch(segment.writer, segment.Background.String())
 		segment.Background = color.Ansi(match)
 	}
 
-	return segment.Background
+	segment.backgroundCache = segment.Background
+	segment.backgroundResolved = true
+
+	return segment.backgroundCache
 }
 
 func (segment *Segment) ResolveStyle() SegmentStyle {
@@ -287,6 +329,21 @@ func (segment *Segment) hasCache() bool {
 	return segment.Cache != nil && !segment.Cache.Duration.IsEmpty()
 }
 
+// DataKey returns the identity used to look up segment data: the segment's
+// alias if set, falling back to its type.
+func (segment *Segment) DataKey() string {
+	if segment.Alias != "" {
+		return segment.Alias
+	}
+
+	return string(segment.Type)
+}
+
+// Writer returns the segment's underlying SegmentWriter.
+func (segment *Segment) Writer() SegmentWriter {
+	return segment.writer
+}
+
 func (segment *Segment) isToggled() bool {
 	togglesMap, OK := cache.Get[map[string]bool](cache.Session, cache.TOGGLECACHE)
 	if !OK || len(togglesMap) == 0 {
@@ -294,12 +351,7 @@ func (segment *Segment) isToggled() bool {
 		return false
 	}
 
-	segmentName := segment.Alias
-	if segmentName == "" {
-		segmentName = string(segment.Type)
-	}
-
-	if togglesMap[segmentName] {
+	if togglesMap[segment.DataKey()] {
 		log.Debugf("segment toggled off: %s", segment.Name())
 		return true
 	}
@@ -312,10 +364,10 @@ func (segment *Segment) restoreCache() bool {
 		return false
 	}
 
-	cacheKey := segment.cacheKey()
-	data, OK := cache.Get[string](cache.Session, cacheKey)
+	key, store := segment.cacheKeyAndStore()
+	data, OK := cache.Get[string](store, key)
 	if !OK {
-		log.Debugf("no cache found for segment: %s, key: %s", segment.Name(), cacheKey)
+		log.Debugf("no cache found for segment: %s, key: %s", segment.Name(), key)
 		return false
 	}
 
@@ -334,8 +386,38 @@ func (segment *Segment) restoreCache() bool {
 	return true
 }
 
+// restoreData replays a segment's writer state from the data file supplied via
+// runtime.Flags.SegmentData, bypassing the real runtime entirely. This lets
+// segments render from a recorded fixture instead of probing the environment.
+func (segment *Segment) restoreData() bool {
+	data, OK := segment.env.Flags().SegmentData[segment.DataKey()]
+	if !OK {
+		return false
+	}
+
+	err := json.Unmarshal(data, &segment.writer)
+	if err != nil {
+		log.Error(err)
+		return false
+	}
+
+	segment.Enabled = true
+	segment.restored = true
+
+	template.Cache.AddSegmentData(segment.Name(), segment.writer)
+
+	log.Debug("restored segment from data: ", segment.Name())
+
+	return true
+}
+
 func (segment *Segment) setCache() {
 	if segment.restored || !segment.hasCache() {
+		return
+	}
+
+	// Never cache pending state to avoid polluting cache with incomplete data
+	if segment.Pending {
 		return
 	}
 
@@ -348,18 +430,21 @@ func (segment *Segment) setCache() {
 	// TODO: check if we can make segmentwriter a generic Type indicator
 	// that way we can actually get the value straight from cache.Get
 	// and marchalling is obsolete
-	cache.Set(cache.Session, segment.cacheKey(), string(data), segment.Cache.Duration)
+	key, store := segment.cacheKeyAndStore()
+	cache.Set(store, key, string(data), segment.Cache.Duration)
 }
 
-func (segment *Segment) cacheKey() string {
+func (segment *Segment) cacheKeyAndStore() (string, cache.Store) {
 	format := "segment_cache_%s"
 	switch segment.Cache.Strategy {
 	case Session:
-		return fmt.Sprintf(format, segment.Name())
+		return fmt.Sprintf(format, segment.Name()), cache.Session
+	case Device:
+		return fmt.Sprintf(format, segment.Name()), cache.Device
 	case Folder:
 		fallthrough
 	default:
-		return fmt.Sprintf(format, strings.Join([]string{segment.Name(), segment.folderKey()}, "_"))
+		return fmt.Sprintf(format, strings.Join([]string{segment.Name(), segment.folderKey()}, "_")), cache.Device
 	}
 }
 
@@ -373,6 +458,15 @@ func (segment *Segment) folderKey() string {
 }
 
 func (segment *Segment) string() string {
+	// Use simple pending text if segment is still pending
+	if segment.Pending {
+		if segment.Placeholder != "" {
+			return segment.Placeholder
+		}
+
+		return "..."
+	}
+
 	result := segment.Templates.Resolve(segment.writer, "", segment.TemplatesLogic)
 	if len(result) != 0 {
 		return result
@@ -414,7 +508,16 @@ func (segment *Segment) cwdExcluded() bool {
 }
 
 func (segment *Segment) evaluateNeeds() {
+	if segment.needsEvaluated {
+		return
+	}
+
+	segment.needsEvaluated = true
+
 	value := segment.Template
+	if value == "" && segment.writer != nil {
+		value = segment.writer.Template()
+	}
 
 	if len(segment.ForegroundTemplates) != 0 {
 		value += strings.Join(segment.ForegroundTemplates, "")

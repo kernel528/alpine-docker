@@ -11,9 +11,14 @@ import (
 )
 
 func (e *Engine) Primary() string {
+	return e.primaryInternal(false)
+}
+
+// primaryInternal handles both regular and streaming prompt rendering
+func (e *Engine) primaryInternal(fromCache bool) string {
 	needsPrimaryRightPrompt := e.needsPrimaryRightPrompt()
 
-	e.writePrimaryPrompt(needsPrimaryRightPrompt)
+	e.writePrimaryPromptInternal(needsPrimaryRightPrompt, fromCache)
 
 	switch e.Env.Shell() {
 	case shell.ZSH:
@@ -44,6 +49,11 @@ func (e *Engine) Primary() string {
 }
 
 func (e *Engine) writePrimaryPrompt(needsPrimaryRPrompt bool) {
+	e.writePrimaryPromptInternal(needsPrimaryRPrompt, false)
+}
+
+// writePrimaryPromptInternal handles both regular and streaming prompt rendering
+func (e *Engine) writePrimaryPromptInternal(needsPrimaryRPrompt, fromCache bool) {
 	if e.Config.ShellIntegration {
 		exitCode, _ := e.Env.StatusCodes()
 		e.write(terminal.CommandFinished(exitCode, e.Env.Flags().NoExitCode))
@@ -54,11 +64,50 @@ func (e *Engine) writePrimaryPrompt(needsPrimaryRPrompt bool) {
 	cycle = &e.Config.Cycle
 	var cancelNewline, didRender bool
 
-	for i, block := range e.Config.Blocks {
+	// Choose block source based on whether we're rendering from cache
+	blocks := e.Config.Blocks
+	if fromCache {
+		blocks = e.allBlocks
+	}
+
+	// Launch execution for every segment of every block up front so they all
+	// run concurrently; blocks are still rendered sequentially afterward, in
+	// order, so wall-clock latency becomes max(slowest segment) instead of
+	// sum(slowest segment per block). The cache path re-renders segment data
+	// that was already executed, so there's nothing to launch there.
+	var launched []chan result
+	if !fromCache {
+		launched = make([]chan result, len(blocks))
+		for i, block := range blocks {
+			if block.Type == config.RPrompt && !needsPrimaryRPrompt {
+				continue
+			}
+
+			launched[i] = e.launchBlockSegments(block)
+		}
+	}
+
+	// Drain every block's channel before rendering any block so that executed
+	// is fully populated up front. This allows cross-block .Segments.X
+	// dependencies to resolve in both directions — an earlier block can
+	// reference a segment from a later block and vice versa.
+	executed := make(map[string]bool)
+	allResults := make([][]*config.Segment, len(blocks))
+
+	if !fromCache {
+		for i, block := range blocks {
+			if launched[i] == nil {
+				continue
+			}
+
+			allResults[i] = drainBlockResults(launched[i], len(block.Segments), executed)
+		}
+	}
+
+	for i, block := range blocks {
 		// do not print a leading newline when we're at the first row and the prompt is cleared
 		if i == 0 {
-			row, _ := e.Env.CursorPosition()
-			cancelNewline = e.Env.Flags().Cleared || e.Env.Flags().PromptCount == 1 || row == 1
+			cancelNewline = e.cancelNewline()
 		}
 
 		// skip setting a newline when we didn't print anything yet
@@ -70,14 +119,22 @@ func (e *Engine) writePrimaryPrompt(needsPrimaryRPrompt bool) {
 			continue
 		}
 
-		if e.renderBlock(block, cancelNewline) {
+		// Choose render method based on whether we're rendering from cache
+		var rendered bool
+		if fromCache {
+			rendered = e.renderBlockFromCache(block, cancelNewline)
+		} else {
+			rendered = e.renderLaunchedBlock(block, allResults[i], executed, cancelNewline)
+		}
+
+		if rendered {
 			didRender = true
 		}
+	}
 
-		if e.Config.ToolTipsAction.IsDefault() {
-			continue
-		}
-
+	// Only handle tooltip caching in regular (non-cached) rendering, once per
+	// prompt rather than once per block.
+	if !fromCache && !e.Config.ToolTipsAction.IsDefault() {
 		cache.Set(cache.Session, RPromptKey, e.rprompt, cache.INFINITE)
 		cache.Set(cache.Session, RPromptLengthKey, e.rpromptLength, cache.INFINITE)
 	}

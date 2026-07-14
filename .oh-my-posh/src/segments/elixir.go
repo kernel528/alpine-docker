@@ -8,20 +8,23 @@ func (e *Elixir) Template() string {
 	return languageTemplate
 }
 
+const elixirToolName = "elixir"
+
 func (e *Elixir) Enabled() bool {
 	e.extensions = []string{"*.ex", "*.exs"}
-	e.commands = []*cmd{
-		{
-			executable: "asdf",
-			args:       []string{"current", "elixir"},
-			regex:      `elixir\s+(?P<version>((?P<major>[0-9]+).(?P<minor>[0-9]+).(?P<patch>[0-9]+)))[^\s]*\s+`,
+	e.tooling = map[string]*cmd{
+		asdfToolName: {
+			executable: asdfToolName,
+			args:       []string{"current", elixirToolName},
+			regex:      `elixir\s+` + versionRegex + `[^\s]*\s+`,
 		},
-		{
-			executable: "elixir",
-			args:       []string{"--version"},
-			regex:      `Elixir (?P<version>((?P<major>[0-9]+).(?P<minor>[0-9]+).(?P<patch>[0-9]+)))`,
+		elixirToolName: {
+			executable: elixirToolName,
+			args:       []string{versionFlagArg},
+			regex:      `Elixir ` + versionRegex,
 		},
 	}
+	e.defaultTooling = []string{asdfToolName, elixirToolName}
 	e.versionURLTemplate = "https://github.com/elixir-lang/elixir/releases/tag/v{{ .Full }}"
 
 	return e.Language.Enabled()

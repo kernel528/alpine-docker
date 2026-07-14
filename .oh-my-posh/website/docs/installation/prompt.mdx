@@ -21,7 +21,9 @@ oh-my-posh get shell
   groupId="shell"
   values={[
     { label: 'bash', value: 'bash', },
+    { label: 'claude', value: 'claude', },
     { label: 'cmd', value: 'cmd', },
+    { label: 'copilot', value: 'copilot', },
     { label: 'elvish', value: 'elvish', },
     { label: 'fish', value: 'fish', },
     { label: 'nu', value: 'nu', },
@@ -51,23 +53,74 @@ Or, when using `~/.profile`.
 ```
 
 </TabItem>
+<TabItem value="claude">
+
+To enable Claude Code integration with Oh My Posh, configure Claude Code to use Oh My Posh as the statusline command.
+
+Add the following to your Claude Code settings:
+
+```json title="~/.claude/settings.json"
+{
+  "statusLine": {
+    "type": "command",
+    "command": "oh-my-posh claude",
+    "padding": 0
+  }
+}
+```
+
+:::tip
+You can use the `--config` flag to point to a tailored Oh My Posh config just for Claude Code:
+
+```bash
+oh-my-posh claude --config /path/to/claude.omp.json
+```
+
+:::
+
+For more information about the Claude segment properties and customization options, see the [Claude segment documentation](/docs/segments/cli/claude).
+
+</TabItem>
+<TabItem value="copilot">
+
+To enable GitHub Copilot CLI integration with Oh My Posh, add the following to your Copilot CLI settings:
+
+```json title="~/.copilot/settings.json"
+{
+  "statusLine": {
+    "type": "command",
+    "command": "oh-my-posh copilot"
+  },
+  "feature_flags": {
+    "enabled": ["STATUS_LINE"]
+  },
+  "experimental": true
+}
+```
+
+:::tip
+You can use the `--config` flag to point to a tailored Oh My Posh config just for Copilot CLI:
+
+```bash
+oh-my-posh copilot --config /path/to/copilot.omp.json
+```
+
+:::
+
+Restart Copilot CLI or run `/restart` in an open session to pick up the new settings.
+
+For more information about the Copilot CLI segment properties and customization options, see the
+[Copilot CLI segment documentation].
+
+</TabItem>
 <TabItem value="cmd">
 
 There's no out-of-the-box support for Windows CMD when it comes to custom prompts.
 There is however a way to do it using [Clink][clink], which at the same time supercharges
 your cmd experience. Follow the installation instructions and make sure you select autostart.
 
-Integrating Oh My Posh with Clink is easy: create a new file called oh-my-posh.lua in your Clink
-scripts directory (run `clink info` inside cmd to find that file's location).
-
-```lua title="oh-my-posh.lua"
-load(io.popen('oh-my-posh init cmd'):read("*a"))()
-```
-
-Once added, restart cmd for the changes to take effect.
-
-:::info
-Clink has builtin support for Oh My Posh. It allows you to set the prompt using the `clink` command.
+Since Clink v1.7.0, Clink has builtin support for Oh My Posh. This is the recommended way to
+integrate the two, as it lets Clink manage the prompt for you:
 
 ```bash
 clink config prompt use oh-my-posh
@@ -78,6 +131,17 @@ To set the configuration file, use the following command:
 ```bash
 clink set ohmyposh.theme <path>
 ```
+
+:::info
+If you're on an older version of Clink without builtin support, you can integrate Oh My Posh
+manually: create a new file called oh-my-posh.lua in your Clink scripts directory (run
+`clink info` inside cmd to find that file's location).
+
+```lua title="oh-my-posh.lua"
+load(io.popen('oh-my-posh init cmd'):read("*a"))()
+```
+
+Once added, restart cmd for the changes to take effect.
 :::
 
 </TabItem>
@@ -217,8 +281,8 @@ exec zsh
 </TabItem>
 </Tabs>
 
+[Copilot CLI segment documentation]: /docs/segments/cli/copilot-cli
 [clink]: https://chrisant996.github.io/clink/
-[iterm2]: https://www.iterm2.com/
-[homebrew-problem]: https://github.com/JanDeDobbeleer/oh-my-posh/discussions/2644
+[iterm2]: https://iterm2.com/
 [sign]: https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_signing?view=powershell-7.3#methods-of-signing-scripts
 [transient prompt]: /docs/configuration/transient

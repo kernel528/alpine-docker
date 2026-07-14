@@ -126,6 +126,16 @@ func TestEnabledInWorktree(t *testing.T) {
 			ExpectedRealFolder:    TestRootPath + "dev/",
 			ExpectedRootFolder:    TestRootPath + "dev/separate/.git/posh",
 		},
+		{
+			Case:                  "worktree with relative gitdir path",
+			ExpectedEnabled:       true,
+			WorkingFolder:         TestRootPath + "dev/.git/worktrees/folder_worktree",
+			WorkingFolderAddon:    "gitdir",
+			WorkingFolderContent:  "../../../worktree/.git\n",
+			ExpectedWorkingFolder: TestRootPath + "dev/.git/worktrees/folder_worktree",
+			ExpectedRealFolder:    TestRootPath + "dev/worktree",
+			ExpectedRootFolder:    TestRootPath + dotGit,
+		},
 	}
 	fileInfo := &runtime.FileInfo{
 		Path:         TestRootPath + dotGit,
@@ -651,6 +661,7 @@ func TestGitCleanSSHURL(t *testing.T) {
 		{Case: "regular URL", Expected: "https://src.example.com/user/repo", Upstream: "/src.example.com/user/repo.git"},
 		{Case: "domain:path", Expected: "https://host.xz/path/to/repo", Upstream: "host.xz:/path/to/repo.git/"},
 		{Case: "ssh with port", Expected: "https://host.xz/path/to/repo", Upstream: "ssh://user@host.xz:1234/path/to/repo.git"},
+		{Case: "ssh with 3-digit port", Expected: "https://host.xz/path/to/repo", Upstream: "ssh://user@host.xz:234/path/to/repo.git"},
 		{Case: "ssh with port, trailing slash", Expected: "https://host.xz/path/to/repo", Upstream: "ssh://user@host.xz:1234/path/to/repo.git/"},
 		{Case: "ssh without port", Expected: "https://host.xz/path/to/repo", Upstream: "ssh://user@host.xz/path/to/repo.git/"},
 		{Case: "ssh port, no user", Expected: "https://host.xz/path/to/repo", Upstream: "ssh://host.xz:1234/path/to/repo.git"},
@@ -676,11 +687,11 @@ func TestGitUpstream(t *testing.T) {
 		Expected string
 		Upstream string
 	}{
-		{Case: "No upstream", Expected: "", Upstream: ""},
+		{Case: "No upstream", Expected: "G", Upstream: ""},
 		{Case: "SSH url", Expected: "G", Upstream: "ssh://git@git.my.domain:3001/ADIX7/dotconfig.git"},
 		{Case: "Gitea", Expected: "EX", Upstream: "_gitea@src.example.com:user/repo.git"},
 		{Case: "GitHub", Expected: "GH", Upstream: "github.com/test"},
-		{Case: "Gitlab", Expected: "GL", Upstream: "gitlab.com/test"},
+		{Case: "GitLab", Expected: "GL", Upstream: "gitlab.com/test"},
 		{Case: "Bitbucket", Expected: "BB", Upstream: "bitbucket.org/test"},
 		{Case: "Azure DevOps", Expected: "AD", Upstream: "dev.azure.com/test"},
 		{Case: "Azure DevOps Dos", Expected: "AD", Upstream: "test.visualstudio.com"},
@@ -712,9 +723,9 @@ func TestGitUpstream(t *testing.T) {
 
 		g := &Git{
 			Scm: Scm{
-				command: GITCOMMAND,
+				command:  GITCOMMAND,
+				Upstream: "origin/main",
 			},
-			Upstream: "origin/main",
 		}
 		g.Init(props, env)
 
@@ -755,9 +766,11 @@ func TestGetBranchStatus(t *testing.T) {
 		}
 
 		g := &Git{
+			Scm: Scm{
+				Upstream: tc.Upstream,
+			},
 			Ahead:        tc.Ahead,
 			Behind:       tc.Behind,
-			Upstream:     tc.Upstream,
 			UpstreamGone: tc.UpstreamGone,
 		}
 		g.Init(props, new(mock.Environment))
@@ -960,7 +973,7 @@ func TestGitIgnoreSubmodules(t *testing.T) {
 		Expected         string
 	}{
 		{
-			Case:     "Overide",
+			Case:     "Override",
 			Expected: "--ignore-submodules=all",
 			IgnoreSubmodules: map[string]string{
 				"foo": "all",
@@ -1417,9 +1430,9 @@ func TestPushStatusAheadAndBehind(t *testing.T) {
 				command:     "git",
 				repoRootDir: "/dir",
 				scmDir:      "/dir/.git",
+				Upstream:    "origin/main",
 			},
-			Ref:      "main",
-			Upstream: "origin/main",
+			Ref: "main",
 		}
 
 		props := options.Map{

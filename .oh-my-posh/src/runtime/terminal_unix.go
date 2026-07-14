@@ -25,6 +25,10 @@ func (term *Terminal) QueryWindowTitles(_, _ string) (string, error) {
 	return "", &NotImplemented{}
 }
 
+func (term *Terminal) QueryMediaPlayer(_ string) (*MediaInfo, error) {
+	return nil, &NotImplemented{}
+}
+
 func (term *Terminal) IsWsl() bool {
 	defer log.Trace(time.Now())
 	const key = "is_wsl"
@@ -81,6 +85,7 @@ func (term *Terminal) TerminalWidth() (int, error) {
 
 	term.CmdFlags.TerminalWidth = int(width)
 	log.Debugf("terminal width: %d", term.CmdFlags.TerminalWidth)
+
 	return term.CmdFlags.TerminalWidth, err
 }
 
@@ -96,21 +101,38 @@ func (term *Terminal) Platform() string {
 	}()
 
 	if wsl := term.Getenv("WSL_DISTRO_NAME"); len(wsl) != 0 {
-		platform = strings.Split(strings.ToLower(wsl), "-")[0]
+		platform, _, _ = strings.Cut(wsl, "-")
+		platform = strings.ToLower(platform)
 		log.Debug(platform)
 		return platform
 	}
 
 	platform, _, _, _ = host.PlatformInformation()
-	if platform == "arch" {
-		// validate for Manjaro
-		lsbInfo := term.FileContent("/etc/lsb-release")
-		if strings.Contains(strings.ToLower(lsbInfo), "manjaro") {
-			platform = "manjaro"
-		}
-	}
+	platform = term.getSpecialLinuxDistros(platform)
 
 	log.Debug(platform)
+	return platform
+}
+
+func (term *Terminal) getSpecialLinuxDistros(platform string) string {
+	lsbInfo := term.FileContent("/etc/lsb-release")
+
+	if platform == "debian" && strings.Contains(strings.ToLower(lsbInfo), "zorin") {
+		return "zorin"
+	}
+
+	if platform != "arch" {
+		return platform
+	}
+
+	if strings.Contains(strings.ToLower(lsbInfo), "manjaro") {
+		return "manjaro"
+	}
+
+	if strings.Contains(strings.ToLower(lsbInfo), "artix") {
+		return "artix"
+	}
+
 	return platform
 }
 

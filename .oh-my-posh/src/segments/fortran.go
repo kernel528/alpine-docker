@@ -8,6 +8,8 @@ func (f *Fortran) Template() string {
 	return languageTemplate
 }
 
+const gfortranToolName = "gfortran"
+
 func (f *Fortran) Enabled() bool {
 	f.extensions = []string{
 		"*.f", "*.for", "*.fpp",
@@ -18,13 +20,14 @@ func (f *Fortran) Enabled() bool {
 		"*.F03", "*.F08",
 		"fpm.toml",
 	}
-	f.commands = []*cmd{
-		{
-			executable: "gfortran",
-			args:       []string{"--version"},
-			regex:      `GNU Fortran \(.*\) (?P<version>((?P<major>[0-9]+).(?P<minor>[0-9]+).(?P<patch>[0-9]+)))`,
+	f.tooling = map[string]*cmd{
+		gfortranToolName: {
+			executable: gfortranToolName,
+			args:       []string{versionFlagArg},
+			regex:      `GNU Fortran \(.*\) ` + versionRegex,
 		},
 	}
+	f.defaultTooling = []string{gfortranToolName}
 
 	return f.Language.Enabled()
 }
