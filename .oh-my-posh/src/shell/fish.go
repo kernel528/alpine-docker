@@ -13,17 +13,21 @@ func (f Features) Fish() Code {
 	switch f {
 	case Transient:
 		return "set --global _omp_transient_prompt 1"
+	case CursorPositioning:
+		return "set --global _omp_cursor_positioning 1"
 	case FTCSMarks:
 		return "set --global _omp_ftcs_marks 1"
 	case PromptMark:
 		return "set --global _omp_prompt_mark 1"
 	case Tooltips:
 		return "enable_poshtooltips"
+	case Streaming:
+		return "set --global _omp_enable_streaming 1"
 	case Upgrade:
 		return unixUpgrade
 	case Notice:
 		return unixNotice
-	case RPrompt, PoshGit, Azure, LineError, Jobs, CursorPositioning, Async:
+	case RPrompt, PoshGit, Azure, LineError, Jobs, Async, KeyHandlers, VIMode:
 		fallthrough
 	default:
 		return ""

@@ -33,15 +33,16 @@ func (n *Node) Template() string {
 }
 
 func (n *Node) Enabled() bool {
-	n.extensions = []string{"*.js", "*.ts", "package.json", ".nvmrc", "pnpm-workspace.yaml", ".pnpmfile.cjs", ".vue"}
-	n.commands = []*cmd{
-		{
-			executable: "node",
-			args:       []string{"--version"},
+	n.extensions = []string{"*.js", "*.ts", fileName, ".nvmrc", "pnpm-workspace.yaml", ".pnpmfile.cjs", ".vue"}
+	n.tooling = map[string]*cmd{
+		nodeToolName: {
+			executable: nodeToolName,
+			args:       []string{versionFlagArg},
 			regex:      `(?:v(?P<version>((?P<major>[0-9]+).(?P<minor>[0-9]+).(?P<patch>[0-9]+))))`,
 		},
 	}
-	n.versionURLTemplate = "https://github.com/nodejs/node/blob/master/doc/changelogs/CHANGELOG_V{{ .Major }}.md#{{ .Full }}"
+	n.defaultTooling = []string{nodeToolName}
+	n.versionURLTemplate = "https://github.com/nodejs/node/blob/main/doc/changelogs/CHANGELOG_V{{ .Major }}.md#{{ .Full }}"
 	n.Language.matchesVersionFile = n.matchesVersionFile
 	n.Language.loadContext = n.loadContext
 
@@ -61,37 +62,37 @@ func (n *Node) loadContext() {
 	}{
 		{
 			fileName:     "pnpm-lock.yaml",
-			name:         "pnpm",
+			name:         pnpmToolName,
 			iconProperty: PnpmIcon,
-			defaultIcon:  "\U000F02C1",
+			defaultIcon:  "\ue865",
 		},
 		{
 			fileName:     "yarn.lock",
-			name:         "yarn",
+			name:         yarnToolName,
 			iconProperty: YarnIcon,
-			defaultIcon:  "\U000F011B",
+			defaultIcon:  "\ue6a7",
 		},
 		{
 			fileName:     "bun.lockb",
-			name:         "bun",
+			name:         bunToolName,
 			iconProperty: BunIcon,
 			defaultIcon:  "\ue76f",
 		},
 		{
 			fileName:     "bun.lock",
-			name:         "bun",
+			name:         bunToolName,
 			iconProperty: BunIcon,
 			defaultIcon:  "\ue76f",
 		},
 		{
 			fileName:     "package-lock.json",
-			name:         "npm",
+			name:         npmToolName,
 			iconProperty: NPMIcon,
 			defaultIcon:  "\uE71E",
 		},
 		{
-			fileName:     "package.json",
-			name:         "npm",
+			fileName:     fileName,
+			name:         npmToolName,
 			iconProperty: NPMIcon,
 			defaultIcon:  "\uE71E",
 		},
@@ -135,9 +136,11 @@ func (n *Node) matchesVersionFile() (string, bool) {
 		case "hydrogen":
 			fileVersion = "18.20.8"
 		case "iron":
-			fileVersion = "20.19.3"
+			fileVersion = "20.19.6"
 		case "jod":
-			fileVersion = "22.17.0"
+			fileVersion = "22.21.1"
+		case "krypton":
+			fileVersion = "24.12.0"
 		}
 	}
 

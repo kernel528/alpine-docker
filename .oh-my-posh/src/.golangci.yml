@@ -28,6 +28,10 @@ linters:
     - unused
     - whitespace
   settings:
+    exhaustive:
+      default-signifies-exhaustive: true
+    goconst:
+      ignore-tests: true
     gocritic:
       enabled-tags:
         - diagnostic
@@ -38,6 +42,10 @@ linters:
         - experimental
     lll:
       line-length: 180
+    revive:
+      rules:
+        - name: var-naming
+          disabled: true
   exclusions:
     generated: lax
     presets:

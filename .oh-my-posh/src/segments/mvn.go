@@ -5,19 +5,22 @@ type Mvn struct {
 }
 
 func (m *Mvn) Enabled() bool {
+	const mvnToolName = "mvn"
+
 	m.extensions = []string{"pom.xml"}
-	m.commands = []*cmd{
-		{
-			executable: "mvn",
-			args:       []string{"--version"},
+	m.tooling = map[string]*cmd{
+		mvnToolName: {
+			executable: mvnToolName,
+			args:       []string{versionFlagArg},
 			regex:      `(?P<version>((?P<major>[0-9]+).(?P<minor>[0-9]+).(?P<patch>[0-9]+)(?:-(?P<prerelease>[a-z]+-[0-9]+))?))`,
 		},
 	}
+	m.defaultTooling = []string{mvnToolName}
 	m.versionURLTemplate = "https://github.com/apache/maven/releases/tag/maven-{{ .Full }}"
 
 	mvnw, err := m.env.HasParentFilePath("mvnw", false)
 	if err == nil {
-		m.commands[0].executable = mvnw.Path
+		m.tooling[mvnToolName].executable = mvnw.Path
 	}
 
 	return m.Language.Enabled()

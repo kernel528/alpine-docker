@@ -2,7 +2,9 @@ package cache
 
 import (
 	"encoding/gob"
+	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -16,6 +18,13 @@ type store struct {
 	filePath string
 	dirty    bool
 	persist  bool
+	// locked is set when the on-disk cache file could not be opened because
+	// another process holds it (e.g. Windows sharing violation that
+	// persisted past the retry window). When true, the store operates
+	// purely in-memory for the lifetime of this process: close() must not
+	// attempt to (re)create the file, since doing so would truncate the
+	// other process's data.
+	locked bool
 }
 
 var (
@@ -39,7 +48,7 @@ func (s Store) new() *store {
 
 // getStore returns the appropriate store based on the Store identifier
 func (s Store) get() *store {
-	switch s { //nolint:exhaustive
+	switch s {
 	case Device:
 		if device == nil {
 			device = s.new()
@@ -63,9 +72,20 @@ func (s Store) init(filePath string, persist bool) {
 	store.cache = maps.NewConcurrent[*Entry[any]]()
 	store.filePath = filepath.Join(Path(), filePath)
 	store.persist = persist
+	store.dirty = false
+	store.locked = false
 
 	reader, err := openFile(store.filePath)
 	if err != nil {
+		if errors.Is(err, ErrLocked) {
+			// Another process holds the file. Leave it alone: run this
+			// session purely in-memory, don't mark dirty, don't recreate
+			// on close.
+			log.Debugf("(%s) cache file is locked, running in-memory only", string(s))
+			store.locked = true
+			return
+		}
+
 		// set to dirty so we create it on close
 		log.Error(err)
 		store.dirty = true
@@ -96,24 +116,56 @@ func (s Store) init(filePath string, persist bool) {
 	}
 }
 
+// touchSessionFile updates the session file's modification time if it's older than 1 hour.
+// This prevents stale session cache files from being cleaned up while reducing steady-state overhead.
+func touchSessionFile(filePath string) {
+	info, err := os.Stat(filePath)
+	if err != nil {
+		return
+	}
+
+	if time.Since(info.ModTime()) <= time.Hour {
+		return
+	}
+
+	if err := os.Chtimes(filePath, time.Now(), time.Now()); err != nil {
+		log.Error(err)
+	}
+}
+
 func (s Store) close() {
 	defer log.Trace(time.Now(), string(s))
 
 	store := s.get()
-	if store == nil || !store.persist || !store.dirty {
+	if store == nil || store.locked || !store.persist || !store.dirty {
+		if s == Session && store != nil && !store.locked && store.filePath != "" {
+			touchSessionFile(store.filePath)
+		}
+
 		log.Debugf("(%s) not persisting", string(s))
 		return
 	}
 
 	cache := store.cache.ToSimple()
 
-	file, err := openFile(store.filePath)
+	file, err := openFileForWrite(store.filePath)
 	if err != nil {
+		if errors.Is(err, ErrLocked) {
+			// Became locked between init and close (e.g. another process
+			// started writing meanwhile) — do not recreate/truncate.
+			log.Debugf("(%s) cache file locked on close, skipping persist", string(s))
+			return
+		}
+
 		log.Error(err)
 		return
 	}
 
-	defer file.Close()
+	defer func() {
+		if err := file.Close(); err != nil {
+			log.Error(err)
+		}
+	}()
 
 	enc := gob.NewEncoder(file)
 	if err := enc.Encode(cache); err != nil {
@@ -228,7 +280,7 @@ func Print(s Store) string {
 		builder.WriteString("\n")
 
 		if entry.Expired() {
-			builder.WriteString(fmt.Sprintf("Key: %s [EXPIRED]\n", key))
+			fmt.Fprintf(&builder, "Key: %s [EXPIRED]\n", key)
 			builder.WriteString("\n")
 			continue
 		}
@@ -242,11 +294,11 @@ func Print(s Store) string {
 			ttlInfo = fmt.Sprintf("expires at %s", expiresAt.Format("2006-01-02 15:04:05"))
 		}
 
-		builder.WriteString(fmt.Sprintf("Key: %s\n", key))
-		builder.WriteString(fmt.Sprintf("  Value: %s\n", fmt.Sprintf("%#v", entry.Value)))
-		builder.WriteString(fmt.Sprintf("  Type: %T\n", entry.Value))
-		builder.WriteString(fmt.Sprintf("  Created: %s\n", time.Unix(entry.Timestamp, 0).Format("2006-01-02 15:04:05")))
-		builder.WriteString(fmt.Sprintf("  TTL: %s\n", ttlInfo))
+		fmt.Fprintf(&builder, "Key: %s\n", key)
+		fmt.Fprintf(&builder, "  Value: %s\n", fmt.Sprintf("%#v", entry.Value))
+		fmt.Fprintf(&builder, "  Type: %T\n", entry.Value)
+		fmt.Fprintf(&builder, "  Created: %s\n", time.Unix(entry.Timestamp, 0).Format("2006-01-02 15:04:05"))
+		fmt.Fprintf(&builder, "  TTL: %s\n", ttlInfo)
 	}
 
 	return builder.String()

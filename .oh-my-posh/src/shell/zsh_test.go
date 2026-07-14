@@ -15,7 +15,9 @@ _omp_create_widget zle-line-init _omp_zle-line-init
 _omp_ftcs_marks=1
 "$_omp_executable" upgrade --auto
 "$_omp_executable" notice
-_omp_cursor_positioning=1`
+_omp_cursor_positioning=1
+_omp_enable_streaming=1
+_omp_enable_vimode`
 
 	assert.Equal(t, want, got)
 }

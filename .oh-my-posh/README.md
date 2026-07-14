@@ -18,26 +18,24 @@
 
 ![Number of GitHub Downloads badge](https://img.shields.io/github/downloads/jandedobbeleer/oh-my-posh/total?color=pink&label=GitHub%20Downloads)
 
-<!-- markdownlint-disable -->
-<div align="center" markdown="1">
-   <sup>Special thanks to:</sup>
-   <br>
-   <br>
-   <a href="https://www.warp.dev/oh-my-posh">
-      <img alt="Warp sponsorship" width="400" src="https://github.com/user-attachments/assets/c21102f7-bab9-4344-a731-0cf6b341cab2">
-   </a>
-
-### [Warp, the intelligent terminal for developers](https://www.warp.dev/oh-my-posh)
-[Available for MacOS, Linux, & Windows](https://www.warp.dev/oh-my-posh)<br>
-
-</div>
-<hr>
-<!-- markdownlint-enable -->
-
 This repo was made with love using GitKraken.
 
 [![GitKraken shield][kraken]][kraken-ref]
 <!-- markdownlint-disable first-header-h1 -->
+
+## Sponsors
+
+<!-- markdownlint-disable no-inline-html line-length -->
+<a href="https://coderabbit.link/posh">
+    <picture>
+          <source media="(prefers-color-scheme: dark)" srcset="https://victorious-bubble-f69a016683.media.strapiapp.com/White_Typemark_79b9189d19.svg">
+          <source media="(prefers-color-scheme: light)" srcset="https://victorious-bubble-f69a016683.media.strapiapp.com/Orange_Typemark_43bf516c9d.svg">
+          <img alt="CodeRabbit" height="44" src="https://victorious-bubble-f69a016683.media.strapiapp.com/Orange_Typemark_43bf516c9d.svg" />
+    </picture>
+</a>
+<!-- markdownlint-enable no-inline-html line-length -->J
+
+[Want to become a sponsor?][sponsor-link]
 
 ## Join the community
 
@@ -57,20 +55,11 @@ on oh-my-posh, a modern and more efficient tool was needed to suit my personal n
 
 [![Ko-Fi][kofi-badge]][kofi] - No coffee, no code.
 
-<!-- markdownlint-disable -->
-<a href="https://polar.sh/oh-my-posh">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="https://polar.sh/embed/tiers.svg?org=oh-my-posh&darkmode">
-    <img alt="Subscription Tiers on Polar" src="https://polar.sh/embed/tiers.svg?org=oh-my-posh">
-  </picture>
-</a>
-<!-- markdownlint-enable -->
-
 ## Features
 
 * Shell and platform agnostic
 * Easily configurable
-* The **most** configurable prompt utility
+* The __most__ configurable prompt utility
 * Fast
 * Secondary prompt
 * Right prompt
@@ -105,3 +94,5 @@ using Go (and the amazing [README](https://github.com/justjanne/powerline-go))
 [docs]: https://ohmyposh.dev
 [release-badge]: https://img.shields.io/github/v/release/jandedobbeleer/oh-my-posh?label=Release
 [release]: https://github.com/JanDeDobbeleer/oh-my-posh/releases/latest
+
+[sponsor-link]: https://buy.polar.sh/polar_cl_qnmZxboq1IDUJo03mk2Jue6ktqZrCXElnzH2s2xbV2R

@@ -10,7 +10,6 @@ on:
   workflow_dispatch:
 
 permissions:
-  id-token: write
   contents: read
 
 jobs:
@@ -18,33 +17,16 @@ jobs:
     runs-on: ubuntu-latest
     name: Build and Deploy
     steps:
-      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+      - uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
         with:
           submodules: true
           persist-credentials: false
       - name: Install Go 🗳
         uses: ./.github/workflows/composite/bootstrap-go
       - name: Setup Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e
         with:
           node-version: 20.9.0
-        # Create Kind cluster to have a Kubernetes context for cloud-native-azure theme
-        # Images are defined on every Kind release
-        # See https://github.com/kubernetes-sigs/kind/releases
-      - name: Create k8s v1.23 Kind Cluster
-        uses: helm/kind-action@a1b0e391336a6ee6713a0583f8c6240d70863de3
-        with:
-          node_image: kindest/node:v1.23.4@sha256:0e34f0d0fd448aa2f2819cfd74e99fe5793a6e4938b328f657c8e3f81ee0dfb9
-          cluster_name: posh
-      - name: Create Kubernetes namespace
-        run: |
-          kubectl create ns demo
-      - name: Set default Kubernetes namespace
-        run: |
-          kubectl config set-context posh --namespace demo
-      - uses: azure/login@a457da9ea143d694b1b9c7c869ebb04ebe844ef5
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
       - name: Build oh-my-posh 🔧
         run: |
           cd src
@@ -57,18 +39,17 @@ jobs:
           npm install
           npm run themes
           cd ..
-      - name: Copy schemas 📄
+      - name: Copy schema for MCP validator 📋
         run: |
-          export PATH="$PWD/src/bin:$PATH"
-          oh-my-posh config dsc schema > website/static/dsc.configuration.schema.json
-          oh-my-posh font dsc schema > website/static/dsc.font.schema.json
-          oh-my-posh shell dsc schema > website/static/dsc.shell.schema.json
+          mkdir -p website/api/data
+          cp themes/schema.json website/api/data/schema.json
+          echo "✅ Copied schema.json to website/api/data/"
       - name: Build Docs And Deploy 🚀
         id: builddeploy
         uses: Azure/static-web-apps-deploy@1a947af9992250f3bc2e68ad0754c0b0c11566c9
         with:
           azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_ASHY_MEADOW_063E9BA03 }}
-          repo_token: ${{ secrets.GITHUB_TOKEN }} # Used for Github integrations (i.e. PR comments)
+          repo_token: ${{ secrets.GITHUB_TOKEN }} # Used for GitHub integrations (i.e. PR comments)
           action: "upload"
           ###### Repository/Build Configurations - These values can be configured to match your app requirements. ######
           # For more information regarding Static Web App workflow configurations, please visit: https://aka.ms/swaworkflowconfig

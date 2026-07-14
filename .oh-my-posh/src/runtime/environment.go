@@ -1,6 +1,7 @@
 package runtime
 
 import (
+	"encoding/json"
 	"io"
 	"io/fs"
 
@@ -21,6 +22,18 @@ const (
 
 	PRIMARY = "primary"
 )
+
+// MediaInfo holds a single media session read from the OS media-transport
+// layer (e.g. Windows System Media Transport Controls). It is player-agnostic:
+// the SMTC mechanism can surface any app that publishes a session.
+type MediaInfo struct {
+	// Status is the lowercased playback status: playing/paused/stopped/closed/opened/changing.
+	Status      string
+	Title       string
+	Artist      string
+	Album       string
+	TrackNumber int
+}
 
 type Environment interface {
 	Getenv(key string) string
@@ -46,11 +59,13 @@ type Environment interface {
 	FileContent(file string) string
 	LsDir(input string) []fs.DirEntry
 	RunCommand(command string, args ...string) (string, error)
+	RunCommandWithEnv(command string, envs []string, args ...string) (string, error)
 	RunShellCommand(shell, command string) string
 	ExecutionTime() float64
 	Flags() *Flags
 	BatteryState() (*battery.Info, error)
 	QueryWindowTitles(processName, windowTitleRegex string) (string, error)
+	QueryMediaPlayer(player string) (*MediaInfo, error)
 	WindowsRegistryKeyValue(key string) (*WindowsRegistryValue, error)
 	HTTPRequest(url string, body io.Reader, timeout int, requestModifiers ...http.RequestModifier) ([]byte, error)
 	IsWsl() bool
@@ -68,6 +83,7 @@ type Environment interface {
 }
 
 type Flags struct {
+	SegmentData   map[string]json.RawMessage
 	Type          string
 	PipeStatus    string
 	ConfigPath    string
@@ -76,18 +92,19 @@ type Flags struct {
 	ShellVersion  string
 	PWD           string
 	AbsolutePWD   string
-	ErrorCode     int
+	EnvData       json.RawMessage
+	ExecutionTime float64
 	PromptCount   int
 	Column        int
 	TerminalWidth int
-	ExecutionTime float64
+	ErrorCode     int
 	StackCount    int
 	ConfigHash    uint64
 	JobCount      int
-	HasExtra      bool
+	Cleared       bool
 	Strict        bool
 	Debug         bool
-	Cleared       bool
+	HasExtra      bool
 	NoExitCode    bool
 	Init          bool
 	Migrate       bool
@@ -96,6 +113,7 @@ type Flags struct {
 	IsPrimary     bool
 	Plain         bool
 	Force         bool
+	Streaming     bool
 }
 
 type CommandError struct {
