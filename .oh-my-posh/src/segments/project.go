@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"io/fs"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -17,6 +18,11 @@ import (
 	yaml "go.yaml.in/yaml/v3"
 )
 
+const (
+	ResolveTargetFromSolution options.Option = "resolve_target_from_solution"
+	SolutionSearchDepth       options.Option = "solution_search_depth"
+)
+
 type ProjectItem struct {
 	Fetcher func(item ProjectItem) *ProjectData
 	Name    string
@@ -28,6 +34,11 @@ type ProjectData struct {
 	Version string
 	Name    string
 	Target  string
+}
+
+// Lake file package
+type LakeFileTOML struct {
+	Name string
 }
 
 // Rust Cargo package
@@ -64,12 +75,12 @@ type Project struct {
 func (n *Project) Enabled() bool {
 	n.projects = []*ProjectItem{
 		{
-			Name:    "node",
-			Files:   []string{"package.json"},
+			Name:    nodeToolName,
+			Files:   []string{fileName},
 			Fetcher: n.getNodePackage,
 		},
 		{
-			Name:    "deno",
+			Name:    denoToolName,
 			Files:   []string{"deno.json", "deno.jsonc"},
 			Fetcher: n.getDenoPackage,
 		},
@@ -84,22 +95,22 @@ func (n *Project) Enabled() bool {
 			Fetcher: n.getCargoPackage,
 		},
 		{
-			Name:    "python",
+			Name:    pythonToolName,
 			Files:   []string{"pyproject.toml"},
 			Fetcher: n.getPythonPackage,
 		},
 		{
-			Name:    "mojo",
+			Name:    mojoToolName,
 			Files:   []string{"mojoproject.toml"},
 			Fetcher: n.getPythonPackage,
 		},
 		{
-			Name:    "php",
+			Name:    phpToolName,
 			Files:   []string{"composer.json"},
 			Fetcher: n.getNodePackage,
 		},
 		{
-			Name:    "dart",
+			Name:    dartToolName,
 			Files:   []string{"pubspec.yaml"},
 			Fetcher: n.getDartPackage,
 		},
@@ -109,14 +120,19 @@ func (n *Project) Enabled() bool {
 			Fetcher: n.getNuSpecPackage,
 		},
 		{
-			Name:    "dotnet",
+			Name:    dotnetToolName,
 			Files:   []string{"*.sln", "*.slnf", "*.slnx", "*.vbproj", "*.fsproj", "*.csproj"},
 			Fetcher: n.getDotnetProject,
 		},
 		{
-			Name:    "julia",
+			Name:    juliaToolName,
 			Files:   []string{"JuliaProject.toml", "Project.toml"},
 			Fetcher: n.getProjectData,
+		},
+		{
+			Name:    "lake",
+			Files:   []string{"lakefile.lean", "lakefile.toml"},
+			Fetcher: n.getLakePackage,
 		},
 		{
 			Name:    "powershell",
@@ -299,6 +315,16 @@ func (n *Project) getDotnetProject(item ProjectItem) *ProjectData {
 		target = values["TFM"]
 	}
 
+	if target == "" && (extension == ".sln" || extension == ".slnx") && n.options.Bool(ResolveTargetFromSolution, true) {
+		maxDepth := n.options.Int(SolutionSearchDepth, 2)
+		if projContent := n.findProjectFile(files, maxDepth); projContent != "" {
+			values = regex.FindNamedRegexMatch(tag, projContent)
+			if len(values) != 0 {
+				target = values["TFM"]
+			}
+		}
+	}
+
 	if target == "" {
 		log.Error(fmt.Errorf("cannot extract TFM from %s project file", name))
 	}
@@ -307,6 +333,49 @@ func (n *Project) getDotnetProject(item ProjectItem) *ProjectData {
 		Target: target,
 		Name:   name,
 	}
+}
+
+// findProjectFile scans rootEntries and their subdirectories breadth-first,
+// up to maxDepth levels deep, and returns the content of the first
+// .csproj/.fsproj/.vbproj file found. Paths are kept relative to pwd so
+// FileContent resolves them the same way the caller does.
+func (n *Project) findProjectFile(rootEntries []fs.DirEntry, maxDepth int) string {
+	projectExts := []string{".csproj", ".fsproj", ".vbproj"}
+	pwd := n.env.Pwd()
+
+	var dirs []string
+	for _, entry := range rootEntries {
+		if entry.IsDir() {
+			dirs = append(dirs, entry.Name())
+			continue
+		}
+
+		// a project file can live next to the solution
+		if slices.Contains(projectExts, filepath.Ext(entry.Name())) {
+			return n.env.FileContent(entry.Name())
+		}
+	}
+
+	for depth := 1; depth <= maxDepth && len(dirs) > 0; depth++ {
+		var next []string
+
+		for _, dir := range dirs {
+			for _, entry := range n.env.LsDir(filepath.Join(pwd, dir)) {
+				if entry.IsDir() {
+					next = append(next, filepath.Join(dir, entry.Name()))
+					continue
+				}
+
+				if slices.Contains(projectExts, filepath.Ext(entry.Name())) {
+					return n.env.FileContent(filepath.Join(dir, entry.Name()))
+				}
+			}
+		}
+
+		dirs = next
+	}
+
+	return ""
 }
 
 func (n *Project) getPowerShellModuleData(_ ProjectItem) *ProjectData {
@@ -329,12 +398,12 @@ func (n *Project) getPowerShellModuleData(_ ProjectItem) *ProjectData {
 	lines := strings.SplitSeq(content, "\n")
 
 	for line := range lines {
-		splitted := strings.SplitN(line, "=", 2)
-		if len(splitted) < 2 {
+		key, value, found := strings.Cut(line, "=")
+		if !found {
 			continue
 		}
-		key := strings.TrimSpace(splitted[0])
-		value := strings.TrimSpace(splitted[1])
+		key = strings.TrimSpace(key)
+		value = strings.TrimSpace(value)
 		value = strings.Trim(value, "'\"")
 
 		switch key {
@@ -346,6 +415,51 @@ func (n *Project) getPowerShellModuleData(_ ProjectItem) *ProjectData {
 	}
 
 	return data
+}
+
+func (n *Project) getLakePackage(item ProjectItem) *ProjectData {
+	file := n.firstExistingFile(item.Files)
+	if len(file) == 0 {
+		return nil
+	}
+
+	if strings.HasSuffix(file, ".lean") {
+		return n.getLakeLeanPackage(file)
+	}
+
+	return n.getLakeTomlPackage(file)
+}
+
+func (n *Project) getLakeLeanPackage(file string) *ProjectData {
+	content := n.env.FileContent(file)
+
+	match := regex.FindNamedRegexMatch(`package\s+(?P<NAME>.+?)\s+where`, content)
+	name, ok := match["NAME"]
+	if !ok || len(name) == 0 {
+		return nil
+	}
+
+	// Strip guillemets (« U+00AB and » U+00BB) if present
+	name = strings.Trim(name, "\u00AB\u00BB")
+
+	return &ProjectData{
+		Name: strings.TrimSpace(name),
+	}
+}
+
+func (n *Project) getLakeTomlPackage(file string) *ProjectData {
+	content := n.env.FileContent(file)
+
+	var data LakeFileTOML
+	err := toml.Unmarshal([]byte(content), &data)
+	if err != nil {
+		n.Error = err.Error()
+		return nil
+	}
+
+	return &ProjectData{
+		Name: data.Name,
+	}
 }
 
 func (n *Project) getProjectData(item ProjectItem) *ProjectData {

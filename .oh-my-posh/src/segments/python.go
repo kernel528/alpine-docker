@@ -23,6 +23,9 @@ const (
 	UsePythonVersionFile options.Option = "use_python_version_file"
 	FolderNameFallback   options.Option = "folder_name_fallback"
 	DefaultVenvNames     options.Option = "default_venv_names"
+
+	python3ToolName    = "python3"
+	pythonVersionRegex = "(?:Python " + versionRegex + ")"
 )
 
 func (p *Python) Template() string {
@@ -32,27 +35,38 @@ func (p *Python) Template() string {
 func (p *Python) Enabled() bool {
 	p.extensions = []string{"*.py", "*.ipynb", "pyproject.toml", "venv.bak"}
 	p.folders = []string{".venv", "venv", "virtualenv", "venv-win", "pyenv-win"}
-	p.commands = []*cmd{
-		{
+
+	// Define all available tooling options for Python
+	p.tooling = map[string]*cmd{
+		"pyenv": {
 			getVersion: p.pyenvVersion,
-			regex:      `(?P<version>((?P<major>[0-9]+).(?P<minor>[0-9]+).(?P<patch>[0-9]+)))`,
+			regex:      versionRegex,
 		},
-		{
-			executable: "python",
-			args:       []string{"--version"},
-			regex:      `(?:Python (?P<version>((?P<major>[0-9]+).(?P<minor>[0-9]+).(?P<patch>[0-9]+))))`,
+		pythonToolName: {
+			executable: pythonToolName,
+			args:       []string{versionFlagArg},
+			regex:      pythonVersionRegex,
 		},
-		{
-			executable: "python3",
-			args:       []string{"--version"},
-			regex:      `(?:Python (?P<version>((?P<major>[0-9]+).(?P<minor>[0-9]+).(?P<patch>[0-9]+))))`,
+		python3ToolName: {
+			executable: python3ToolName,
+			args:       []string{versionFlagArg},
+			regex:      pythonVersionRegex,
 		},
-		{
+		"py": {
 			executable: "py",
-			args:       []string{"--version"},
-			regex:      `(?:Python (?P<version>((?P<major>[0-9]+).(?P<minor>[0-9]+).(?P<patch>[0-9]+))))`,
+			args:       []string{versionFlagArg},
+			regex:      pythonVersionRegex,
+		},
+		"uv": {
+			executable: "uv",
+			args:       []string{"run", "--no-sync", "--quiet", "--no-python-downloads", pythonToolName, versionFlagArg},
+			regex:      pythonVersionRegex,
 		},
 	}
+
+	// Default tooling order - users can override via "tooling" option
+	p.defaultTooling = []string{"pyenv", pythonToolName, python3ToolName, "py"}
+
 	p.versionURLTemplate = "https://docs.python.org/release/{{ .Major }}.{{ .Minor }}.{{ .Patch }}/whatsnew/changelog.html#python-{{ .Major }}-{{ .Minor }}-{{ .Patch }}"
 	p.displayMode = p.options.String(DisplayMode, DisplayModeEnvironment)
 	p.Language.loadContext = p.loadContext
@@ -128,9 +142,9 @@ func (p *Python) pyenvVersion() (string, error) {
 	// Use `pyenv root` instead of $PYENV_ROOT?
 	// Is our Python executable at $PYENV_ROOT/bin/python ?
 	// Should p.env expose command paths?
-	cmdPath := p.env.CommandPath("python")
+	cmdPath := p.env.CommandPath(pythonToolName)
 	if cmdPath == "" {
-		cmdPath = p.env.CommandPath("python3")
+		cmdPath = p.env.CommandPath(python3ToolName)
 	}
 
 	if cmdPath == "" {
@@ -148,8 +162,8 @@ func (p *Python) pyenvVersion() (string, error) {
 		return "", err
 	}
 
-	versionString := strings.Split(cmdOutput, ":")[0]
-	if versionString == "" {
+	versionString, _, found := strings.Cut(cmdOutput, ":")
+	if !found || versionString == "" {
 		return "", errors.New("no pyenv version-name found")
 	}
 
@@ -166,7 +180,7 @@ func (p *Python) pyenvVersion() (string, error) {
 	}
 
 	// override virtualenv if pyenv set one
-	parts := strings.Split(shortPath, string(filepath.Separator))
+	parts := strings.SplitN(shortPath, string(filepath.Separator), 4)
 	if len(parts) > 2 && p.canUseVenvName(parts[2]) {
 		p.Venv = parts[2]
 	}
@@ -175,9 +189,9 @@ func (p *Python) pyenvVersion() (string, error) {
 }
 
 func (p *Python) pyvenvCfgPrompt() string {
-	cmdPath := p.env.CommandPath("python")
+	cmdPath := p.env.CommandPath(pythonToolName)
 	if cmdPath == "" {
-		cmdPath = p.env.CommandPath("python3")
+		cmdPath = p.env.CommandPath(python3ToolName)
 	}
 
 	if cmdPath == "" {
@@ -195,15 +209,15 @@ func (p *Python) pyvenvCfgPrompt() string {
 
 	pyvenvCfg := p.env.FileContent(filepath.Join(pyvenvDir, "pyvenv.cfg"))
 	for line := range strings.SplitSeq(pyvenvCfg, "\n") {
-		lineSplit := strings.SplitN(line, "=", 2)
-		if len(lineSplit) != 2 {
+		key, value, found := strings.Cut(line, "=")
+		if !found {
 			continue
 		}
 
-		key := strings.TrimSpace(lineSplit[0])
+		key = strings.TrimSpace(key)
 		if key == "prompt" {
-			value := strings.TrimSpace(lineSplit[1])
-			return value
+			value := strings.TrimSpace(value)
+			return strings.Trim(value, "\"")
 		}
 	}
 

@@ -12,9 +12,30 @@ export PYENV_VIRTUALENV_DISABLE_PROMPT=1
 _omp_executable=::OMP::
 _omp_tooltip_command=''
 
+# zsh/datetime provides the epochtime array for native millisecond timestamps
+zmodload zsh/datetime 2>/dev/null
+
 # switches to enable/disable features
 _omp_cursor_positioning=0
 _omp_ftcs_marks=0
+
+# streaming support variables
+# Preserve the current fd value if the script is re-sourced mid-session; default to -1 when unset or empty.
+_omp_stream_fd=${_omp_stream_fd:--1}
+_omp_enable_streaming=0
+_omp_primary_prompt=""
+_omp_transient_prompt=""
+_omp_streaming_supported=""
+
+# serve daemon variables
+# A persistent `oh-my-posh serve` process renders prompts on request, replacing
+# a process spawn per prompt with an in-memory render. Preserve the fds when
+# the script is re-sourced mid-session so the running daemon is reused.
+_omp_serve_fd_in=${_omp_serve_fd_in:--1}
+_omp_serve_fd_out=${_omp_serve_fd_out:--1}
+_omp_serve_pid=${_omp_serve_pid:-0}
+_omp_serve_cycle=0
+_omp_serve_failures=0
 
 # set secondary prompt
 _omp_secondary_prompt=$($_omp_executable print secondary --shell=zsh)
@@ -46,12 +67,324 @@ function set_poshcontext() {
   return
 }
 
+# cleanup stream resources
+function _omp_cleanup_stream() {
+  # unregister handler first (prevents handler firing on closed fd)
+  [[ $_omp_stream_fd -ge 0 ]] && zle -F $_omp_stream_fd 2>/dev/null
+  # close fd — process gets SIGPIPE and terminates
+  [[ $_omp_stream_fd -ge 0 ]] && eval "exec {_omp_stream_fd}<&-" 2>/dev/null
+  _omp_stream_fd=-1
+}
+
+# start oh-my-posh stream process, block until first prompt arrives
+function _omp_start_streaming() {
+  # cleanup any stale streams
+  _omp_cleanup_stream
+
+  # the transient prompt for this cycle streams in alongside the primary
+  # prompt updates, invalidate the previous cycle's version
+  _omp_transient_prompt=""
+
+  # build command with all context
+  local -a stream_cmd=(
+    "$_omp_executable" stream
+    --save-cache
+    --shell=zsh
+    --shell-version="$ZSH_VERSION"
+    --status=$_omp_status
+    --pipestatus="${_omp_pipestatus[*]}"
+    --no-status=$_omp_no_status
+    --execution-time=$_omp_execution_time
+    --job-count=$_omp_job_count
+    --stack-count=$_omp_stack_count
+    --terminal-width="${COLUMNS:-0}"
+  )
+
+  # start process substitution — no PID tracking needed
+  # closing fd sends SIGPIPE which terminates oh-my-posh
+  # redirect stream process stdin to prevent it from interfering with command output
+  exec {_omp_stream_fd}< <(exec "${stream_cmd[@]}" </dev/null 2>/dev/null)
+
+  if [[ $_omp_stream_fd -lt 0 ]]; then
+    return 1
+  fi
+
+  # block until first prompt arrives (mirrors PowerShell's polling loop)
+  IFS= read -r -u $_omp_stream_fd -d $'\0' _omp_primary_prompt
+  if [[ $? -ne 0 || -z "$_omp_primary_prompt" ]]; then
+    _omp_cleanup_stream
+    return 1
+  fi
+
+  PS1="$_omp_primary_prompt"
+
+  return 0
+}
+
+# async handler: called when data available on fd (reads single value)
+function _omp_async_handler() {
+  local fd=$1
+  local record
+
+  # read single null-delimited record (stream emits one value per \0)
+  IFS= read -r -u $fd -d $'\0' record
+  if [[ $? -ne 0 ]]; then
+    if [[ -z "$record" ]]; then
+      # EOF — only clean up if this is still the active stream fd.
+      # A stale handler from a previous prompt cycle must not close the current stream.
+      [[ $_omp_stream_fd -eq $fd ]] && _omp_cleanup_stream
+      return 0
+    fi
+  fi
+
+  # a record prefixed with U+001E carries the transient prompt: cache it for
+  # the line-init widget so rendering the transient prompt needs no CLI call
+  if [[ $record == $'\x1e'* ]]; then
+    _omp_transient_prompt=${record#$'\x1e'}
+    return 0
+  fi
+
+  _omp_primary_prompt=$record
+  PS1="$_omp_primary_prompt"
+  zle reset-prompt 2>/dev/null
+
+  return 0
+}
+
+# === serve daemon ===
+
+function _omp_serve_stop() {
+  # unregister the zle watcher before closing its fd
+  [[ $_omp_serve_fd_out -ge 0 ]] && zle -F $_omp_serve_fd_out 2>/dev/null
+  [[ $_omp_serve_fd_in -ge 0 ]] && eval "exec {_omp_serve_fd_in}>&-" 2>/dev/null
+  [[ $_omp_serve_fd_out -ge 0 ]] && eval "exec {_omp_serve_fd_out}<&-" 2>/dev/null
+  _omp_serve_fd_in=-1
+  _omp_serve_fd_out=-1
+}
+
+function _omp_serve_start() {
+  _omp_serve_stop
+
+  # The daemon's stderr must never reach the terminal (a Go panic would
+  # corrupt the display).
+  coproc "$_omp_executable" serve --shell=zsh 2>/dev/null
+  [[ $? -ne 0 ]] && return 1
+  _omp_serve_pid=$!
+
+  # Duplicate both directions to session fds: the duplicates survive a later
+  # `coproc` (ours or the user's) replacing the coproc slot.
+  exec {_omp_serve_fd_out}<&p {_omp_serve_fd_in}>&p 2>/dev/null
+  if [[ $_omp_serve_fd_in -lt 0 || $_omp_serve_fd_out -lt 0 ]]; then
+    _omp_serve_stop
+    return 1
+  fi
+
+  # Keep the daemon out of the job table: it must not show up in `jobs` or
+  # inflate the job-count segment. Lifetime is governed by the fds - closing
+  # them (or the shell dying) EOFs the daemon's stdin and it exits.
+  disown %+ 2>/dev/null
+
+  # One session-long watcher delivers async records (segment updates and the
+  # transient refresh) while zle is active. It never races the synchronous
+  # read in _omp_serve_render: zle - and therefore this watcher - is not
+  # active while precmd runs.
+  zle -F $_omp_serve_fd_out _omp_serve_async_handler 2>/dev/null
+
+  return 0
+}
+
+function _omp_serve_escape() {
+  # JSON string escaping using native parameter expansion; the result is
+  # returned in REPLY. Any control characters left after the named escapes
+  # are stripped - JSON forbids them raw.
+  local s=$1
+  s=${s//\\/\\\\}
+  s=${s//\"/\\\"}
+  s=${s//$'\n'/\\n}
+  s=${s//$'\r'/\\r}
+  s=${s//$'\t'/\\t}
+  REPLY=${s//[[:cntrl:]]/}
+}
+
+function _omp_serve_request() {
+  # A write to a dead daemon's pipe raises SIGPIPE, which kills a
+  # non-interactive shell outright - ignore it for the duration of this
+  # function (localtraps restores the user's disposition on return) so the
+  # write degrades into the error path instead. The pid pre-check makes the
+  # common case cheap; the trap covers the race.
+  setopt localoptions localtraps
+  trap '' PIPE
+
+  # never pass a possibly-zero pid to kill: `kill -0 0` signals the caller's
+  # own process group and always succeeds
+  [[ $_omp_serve_pid -gt 0 ]] || return 1
+  kill -0 $_omp_serve_pid 2>/dev/null || return 1
+
+  (( _omp_serve_cycle++ ))
+  _omp_transient_prompt=""
+
+  local name env_json
+  _omp_serve_escape "$PATH"
+  env_json="\"PATH\":\"$REPLY\""
+
+  # Forward every exported POSH_* variable plus the virtual-env markers; the
+  # daemon's environment is otherwise frozen at its start.
+  for name in ${(k)parameters[(I)POSH_*]}; do
+    [[ ${parameters[$name]} == *export* ]] || continue
+    _omp_serve_escape "${(P)name}"
+    env_json+=",\"$name\":\"$REPLY\""
+  done
+
+  for name in VIRTUAL_ENV CONDA_PROMPT_MODIFIER; do
+    [[ -v $name ]] || continue
+    _omp_serve_escape "${(P)name}"
+    env_json+=",\"$name\":\"$REPLY\""
+  done
+
+  _omp_serve_escape "$PWD"
+
+  local json='{"command":"render"'
+  json+=",\"id\":$_omp_serve_cycle"
+  json+=',"shell":"zsh"'
+  json+=",\"shell-version\":\"$ZSH_VERSION\""
+  json+=",\"status\":$_omp_status"
+  json+=",\"pipestatus\":\"${_omp_pipestatus[*]}\""
+  json+=",\"no-status\":$_omp_no_status"
+  json+=",\"execution-time\":$_omp_execution_time"
+  json+=",\"stack-count\":$_omp_stack_count"
+  json+=",\"terminal-width\":${COLUMNS:-0}"
+  json+=",\"job-count\":$_omp_job_count"
+  json+=",\"pwd\":\"$REPLY\""
+  json+=",\"env\":{$env_json}"
+  json+='}'
+
+  print -r -u $_omp_serve_fd_in -- "$json" 2>/dev/null
+}
+
+# Renders the primary prompt through the daemon. Returns nonzero on failure,
+# in which case the caller falls back to the per-prompt stream. The transient
+# prompt records are cached into $_omp_transient_prompt, either here or by the
+# async watcher once zle is active.
+function _omp_serve_render() {
+  if [[ $_omp_serve_fd_in -lt 0 ]] && ! _omp_serve_start; then
+    (( _omp_serve_failures++ ))
+    return 1
+  fi
+
+  if ! _omp_serve_request; then
+    # The daemon died since the last prompt - restart it once.
+    if ! _omp_serve_start || ! _omp_serve_request; then
+      (( _omp_serve_failures++ ))
+      _omp_serve_stop
+      return 1
+    fi
+  fi
+
+  # Block until this cycle's first primary record; async updates and the
+  # transient refresh arrive later through the zle watcher. Stale records
+  # from an aborted cycle are discarded by the id check.
+  local record id payload
+  while true; do
+    if ! IFS= read -r -u $_omp_serve_fd_out -d $'\0' -t 2 record; then
+      (( _omp_serve_failures++ ))
+      _omp_serve_stop
+      return 1
+    fi
+
+    id=${record%%$'\x1f'*}
+    [[ $id == $_omp_serve_cycle ]] || continue
+    payload=${record#*$'\x1f'}
+
+    if [[ $payload == $'\x1e'* ]]; then
+      _omp_transient_prompt=${payload#$'\x1e'}
+      continue
+    fi
+
+    _omp_primary_prompt=$payload
+    PS1=$payload
+    return 0
+  done
+}
+
+# async watcher: like _omp_async_handler, but for the daemon's id-prefixed
+# records
+function _omp_serve_async_handler() {
+  local fd=$1
+  local record
+
+  IFS= read -r -u $fd -d $'\0' record 2>/dev/null
+  if [[ $? -ne 0 ]]; then
+    if [[ -z "$record" ]]; then
+      # EOF - the daemon died. Only tear down if this is still the active fd;
+      # a stale watcher must not close the current daemon's pipe.
+      if [[ $_omp_serve_fd_out -eq $fd ]]; then
+        _omp_serve_stop
+      else
+        zle -F $fd 2>/dev/null
+      fi
+      return 0
+    fi
+  fi
+
+  local id=${record%%$'\x1f'*}
+  [[ $id == $_omp_serve_cycle ]] || return 0
+  local payload=${record#*$'\x1f'}
+
+  if [[ $payload == $'\x1e'* ]]; then
+    _omp_transient_prompt=${payload#$'\x1e'}
+    return 0
+  fi
+
+  _omp_primary_prompt=$payload
+  PS1=$payload
+  zle reset-prompt 2>/dev/null
+
+  return 0
+}
+
+function _omp_serve_abort() {
+  setopt localoptions localtraps
+  trap '' PIPE
+  [[ $_omp_serve_fd_in -ge 0 ]] && print -r -u $_omp_serve_fd_in -- '{"command":"abort"}' 2>/dev/null
+}
+
+function _omp_serve_quit() {
+  setopt localoptions localtraps
+  trap '' PIPE
+  [[ $_omp_serve_fd_in -ge 0 ]] && print -r -u $_omp_serve_fd_in -- '{"command":"quit"}' 2>/dev/null
+  _omp_serve_stop
+}
+
+# shell exit handler
+function _omp_exit_handler() {
+  _omp_serve_quit
+  _omp_cleanup_stream
+}
+
+# register exit handler
+zshexit_functions+=(_omp_exit_handler)
+
+# sets _omp_millis instead of printing to avoid forking a subshell
+function _omp_milliseconds() {
+  if (( ${+epochtime} )); then
+    # copy first: every expansion of epochtime reads the clock again,
+    # so referencing it twice in one expression can straddle a second boundary
+    local -a now=("${epochtime[@]}")
+    _omp_millis=$((now[1] * 1000 + now[2] / 1000000))
+    return
+  fi
+
+  # zsh/datetime is unavailable
+  _omp_millis=$($_omp_executable get millis)
+}
+
 function _omp_preexec() {
   if [[ $_omp_ftcs_marks == 1 ]]; then
     printf '\033]133;C\007'
   fi
 
-  _omp_start_time=$($_omp_executable get millis)
+  _omp_milliseconds
+  _omp_start_time=$_omp_millis
 }
 
 function _omp_precmd() {
@@ -63,9 +396,9 @@ function _omp_precmd() {
   _omp_no_status=true
   _omp_tooltip_command=''
 
-  if [ $_omp_start_time ]; then
-    local omp_now=$($_omp_executable get millis)
-    _omp_execution_time=$(($omp_now - $_omp_start_time))
+  if [[ -n $_omp_start_time ]]; then
+    _omp_milliseconds
+    _omp_execution_time=$(($_omp_millis - $_omp_start_time))
     _omp_no_status=false
   fi
 
@@ -84,6 +417,31 @@ function _omp_precmd() {
   setopt PROMPT_PERCENT
 
   PS2=$_omp_secondary_prompt
+
+  # === STREAMING PATH ===
+  if [[ $_omp_enable_streaming -eq 1 ]]; then
+    # set RPROMPT synchronously (records only carry the primary prompt)
+    RPROMPT=$(_omp_get_prompt right)
+
+    # serve daemon: persistent process, no spawn per prompt. After three
+    # failures the daemon is left alone for the session and every prompt
+    # takes the per-prompt stream below instead.
+    if [[ $_omp_serve_failures -lt 3 ]] && _omp_serve_render; then
+      unset _omp_start_time
+      return 0
+    fi
+
+    # per-prompt stream (also the serve fallback; blocks until first prompt arrives)
+    if _omp_start_streaming; then
+      # PS1 already set by _omp_start_streaming (blocking first read)
+      zle -F $_omp_stream_fd _omp_async_handler
+      unset _omp_start_time
+      return 0
+    fi
+    # fall through to sync
+  fi
+
+  # === FALLBACK PATH ===
   eval "$(_omp_get_prompt primary --eval)"
 
   unset _omp_start_time
@@ -99,6 +457,7 @@ function _omp_cleanup() {
   local omp_widgets=(
     self-insert
     zle-line-init
+    backward-delete-char
   )
   local widget
   for widget in "${omp_widgets[@]}"; do
@@ -156,6 +515,24 @@ function _omp_render_tooltip() {
   zle .reset-prompt
 }
 
+function _omp_restore_rprompt() {
+  if [[ -z $_omp_tooltip_command ]]; then
+    return
+  fi
+
+  setopt local_options no_shwordsplit
+
+  local current_command=${${(MS)BUFFER##[[:graph:]]*}%%[[:space:]]*}
+
+  if [[ $current_command = "$_omp_tooltip_command" ]]; then
+    return
+  fi
+
+  _omp_tooltip_command="$current_command"
+  RPROMPT=$(_omp_get_prompt tooltip --command="$current_command")
+  zle .reset-prompt
+}
+
 function _omp_zle-line-init() {
   [[ $CONTEXT == start ]] || return 0
 
@@ -171,7 +548,21 @@ function _omp_zle-line-init() {
   if [[ -z $BUFFER ]]; then
     terminal_width_option="--terminal-width=$((${COLUMNS-0} - 1))"
   fi
-  eval "$(_omp_get_prompt transient --eval $terminal_width_option)"
+
+  # stop prompt updates before the transient prompt renders so no handler
+  # overwrites it: kill the per-prompt stream, tell the daemon to abort its
+  # in-flight cycle (the daemon itself lives on)
+  _omp_cleanup_stream
+  _omp_serve_abort
+
+  if [[ -n $_omp_transient_prompt ]]; then
+    # rendered ahead of time by the streaming process (one column narrower,
+    # mirroring the empty-buffer workaround above), saves a CLI call
+    PS1=$_omp_transient_prompt
+    RPROMPT=''
+  else
+    eval "$(_omp_get_prompt transient --eval $terminal_width_option)"
+  fi
   zle .reset-prompt
 
   if ((ret)); then
@@ -233,6 +624,19 @@ function enable_poshtooltips() {
   fi
 
   _omp_create_widget $widget _omp_render_tooltip
+  _omp_create_widget backward-delete-char _omp_restore_rprompt
+}
+
+# vi mode tracking — re-render the prompt whenever the active keymap changes
+function _omp_render_vimode() {
+  export POSH_VI_MODE=${KEYMAP:-main}
+  eval "$(_omp_get_prompt primary --eval)"
+  zle .reset-prompt
+}
+
+function _omp_enable_vimode() {
+  export POSH_VI_MODE=${POSH_VI_MODE:-main}
+  _omp_create_widget zle-keymap-select _omp_render_vimode
 }
 
 # legacy functions

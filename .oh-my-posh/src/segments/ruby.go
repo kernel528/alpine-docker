@@ -8,35 +8,43 @@ func (r *Ruby) Template() string {
 	return languageTemplate
 }
 
+const (
+	chrubyToolName    = "chruby"
+	rbenvToolName     = "rbenv"
+	rvmPromptToolName = "rvm-prompt"
+	rubyToolName      = "ruby"
+)
+
 func (r *Ruby) Enabled() bool {
 	r.extensions = []string{"*.rb", "Rakefile", "Gemfile"}
-	r.commands = []*cmd{
-		{
-			executable: "rbenv",
+	r.tooling = map[string]*cmd{
+		rbenvToolName: {
+			executable: rbenvToolName,
 			args:       []string{"version-name"},
 			regex:      `(?P<version>.+)`,
 		},
-		{
-			executable: "rvm-prompt",
+		rvmPromptToolName: {
+			executable: rvmPromptToolName,
 			args:       []string{"i", "v", "g"},
 			regex:      `(?P<version>.+)`,
 		},
-		{
-			executable: "chruby",
+		chrubyToolName: {
+			executable: chrubyToolName,
 			args:       []string(nil),
 			regex:      `\* (?P<version>.+)\n`,
 		},
-		{
-			executable: "asdf",
-			args:       []string{"current", "ruby"},
+		asdfToolName: {
+			executable: asdfToolName,
+			args:       []string{"current", rubyToolName},
 			regex:      `ruby\s+(?P<version>[^\s]+)\s+`,
 		},
-		{
-			executable: "ruby",
-			args:       []string{"--version"},
+		rubyToolName: {
+			executable: rubyToolName,
+			args:       []string{versionFlagArg},
 			regex:      `ruby\s+(?P<version>[^\s]+)\s+`,
 		},
 	}
+	r.defaultTooling = []string{rbenvToolName, rvmPromptToolName, chrubyToolName, asdfToolName, rubyToolName}
 
 	enabled := r.Language.Enabled()
 

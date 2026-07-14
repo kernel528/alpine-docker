@@ -24,39 +24,30 @@ import (
 	yaml "go.yaml.in/yaml/v3"
 )
 
-// custom no config error
-var ErrNoConfig = errors.New("no config file specified")
+// Custom error types for config validation
+type Error struct {
+	message string
+}
+
+func (e Error) Error() string {
+	return fmt.Sprintf(" %s ", e.message)
+}
+
+var (
+	ErrFileNotFound     = Error{"CONFIG NOT FOUND"}
+	ErrInvalidExtension = Error{"INVALID CONFIG EXTENSION"}
+	ErrInvalidTheme     = Error{"INVALID CONFIG THEME"}
+	ErrURLFetch         = Error{"CONFIG URL FETCH FAILED"}
+	ErrParse            = Error{"CONFIG PARSE ERROR"}
+	ErrNoConfig         = Error{"NO CONFIG"}
+)
 
 func Load(configFile string) *Config {
 	defer log.Trace(time.Now())
 
-	if configFile == "" {
-		return Default(false)
-	}
-
-	configFile = resolveConfigLocation(configFile)
-
-	cfg := parseConfigFile(configFile)
-
-	// Migrate segment properties to options for TOML configs
-	// (go-toml/v2 doesn't support custom unmarshalers)
-	cfg.migrateSegmentProperties()
-
-	cfg.toggleSegments()
-
-	cfg.Source = configFile
-
-	if cfg.Upgrade == nil {
-		cfg.Upgrade = &upgrade.Config{
-			Source:        upgrade.CDN,
-			DisplayNotice: cfg.UpgradeNotice,
-			Auto:          cfg.AutoUpgrade,
-			Interval:      cache.ONEWEEK,
-		}
-	}
-
-	if cfg.Upgrade.Interval.IsEmpty() {
-		cfg.Upgrade.Interval = cache.ONEWEEK
+	cfg, err := Parse(configFile)
+	if err != nil {
+		cfg = Default(err)
 	}
 
 	return cfg
@@ -99,8 +90,15 @@ type hashWriter interface {
 	Write(p []byte) (n int, err error)
 }
 
-func parseConfigFile(configFile string) *Config {
+func Parse(configFile string) (*Config, error) {
 	defer log.Trace(time.Now())
+
+	if configFile == "" {
+		log.Debug("no config file specified")
+		return nil, ErrNoConfig
+	}
+
+	configFile = resolveConfigLocation(configFile)
 
 	configDSC := DSC()
 	configDSC.Load()
@@ -110,19 +108,19 @@ func parseConfigFile(configFile string) *Config {
 
 	h := fnv.New64a()
 
-	cfg, err := readConfig(configFile, h)
+	cfg, err := read(configFile, h)
 	if err != nil {
-		log.Error(err)
-		return Default(true)
+		log.Errorf("failed to read config: %s", configFile)
+		return nil, err
 	}
 
 	parentFolder := filepath.Dir(configFile)
 
 	for cfg.Extends != "" {
 		cfg.Extends = resolvePath(cfg.Extends, parentFolder)
-		base, err := readConfig(cfg.Extends, h)
+		base, err := read(cfg.Extends, h)
 		if err != nil {
-			log.Error(err)
+			log.Errorf("failed to read extended config: %s", cfg.Extends)
 			break
 		}
 
@@ -137,9 +135,28 @@ func parseConfigFile(configFile string) *Config {
 		cfg = base
 	}
 
+	cfg.Source = configFile
 	cfg.hash = h.Sum64()
+	// Migrate segment properties to options for TOML configs
+	// (go-toml/v2 doesn't support custom unmarshalers)
+	cfg.migrateSegmentProperties()
 
-	return cfg
+	cfg.toggleSegments()
+
+	if cfg.Upgrade == nil {
+		cfg.Upgrade = &upgrade.Config{
+			Source:        upgrade.CDN,
+			DisplayNotice: cfg.UpgradeNotice,
+			Auto:          cfg.AutoUpgrade,
+			Interval:      cache.ONEWEEK,
+		}
+	}
+
+	if cfg.Upgrade.Interval.IsEmpty() {
+		cfg.Upgrade.Interval = cache.ONEWEEK
+	}
+
+	return cfg, nil
 }
 
 func resolvePath(configFile, parentFolder string) string {
@@ -160,12 +177,12 @@ func resolvePath(configFile, parentFolder string) string {
 	return filepath.Join(parentFolder, configFile)
 }
 
-func readConfig(configFile string, h hashWriter) (*Config, error) {
+func read(configFile string, h hashWriter) (*Config, error) {
 	defer log.Trace(time.Now())
 
 	if configFile == "" {
 		log.Debug("no config file specified, using default")
-		return Default(false), nil
+		return Default(nil), nil
 	}
 
 	var cfg Config
@@ -174,13 +191,24 @@ func readConfig(configFile string, h hashWriter) (*Config, error) {
 
 	data, err := getData(configFile)
 	if err != nil {
-		return nil, err
+		// Determine the type of error
+		if strings.HasPrefix(configFile, "https://") {
+			log.Errorf("failed to fetch config from URL: %v", err)
+			return nil, ErrURLFetch
+		}
+		if errors.Is(err, os.ErrNotExist) {
+			log.Errorf("config file not found: %v", err)
+			return nil, ErrFileNotFound
+		}
+		log.Errorf("failed to read config: %v", err)
+		return nil, ErrFileNotFound
 	}
 
+	var parseErr error
 	switch cfg.Format {
 	case YAML, YML:
 		cfg.Format = YAML
-		err = yaml.Unmarshal(data, &cfg)
+		parseErr = yaml.Unmarshal(data, &cfg)
 	case JSONC, JSON:
 		cfg.Format = JSON
 
@@ -188,16 +216,18 @@ func readConfig(configFile string, h hashWriter) (*Config, error) {
 		data = []byte(str)
 
 		decoder := json.NewDecoder(bytes.NewReader(data))
-		err = decoder.Decode(&cfg)
+		parseErr = decoder.Decode(&cfg)
 	case TOML, TML:
 		cfg.Format = TOML
-		err = toml.Unmarshal(data, &cfg)
+		parseErr = toml.Unmarshal(data, &cfg)
 	default:
-		err = fmt.Errorf("unsupported config file format: %s", cfg.Format)
+		log.Errorf("unsupported config file format: %s", cfg.Format)
+		return nil, ErrInvalidExtension
 	}
 
-	if err != nil {
-		return nil, err
+	if parseErr != nil {
+		log.Errorf("failed to parse config: %v", parseErr)
+		return nil, ErrParse
 	}
 
 	_, err = h.Write(data)
@@ -221,134 +251,136 @@ func isCygwin() bool {
 	return runtimelib.GOOS == "windows" && len(os.Getenv("OSTYPE")) > 0
 }
 
-func isTheme(config string) (string, bool) {
-	themes := map[string]string{
-		"1_shell":                  "1_shell.omp.json",
-		"m365princess":             "M365Princess.omp.json",
-		"agnoster":                 "agnoster.omp.json",
-		"agnoster.minimal":         "agnoster.minimal.omp.json",
-		"agnosterplus":             "agnosterplus.omp.json",
-		"aliens":                   "aliens.omp.json",
-		"amro":                     "amro.omp.json",
-		"atomic":                   "atomic.omp.json",
-		"atomicbit":                "atomicBit.omp.json",
-		"avit":                     "avit.omp.json",
-		"blue-owl":                 "blue-owl.omp.json",
-		"blueish":                  "blueish.omp.json",
-		"bubbles":                  "bubbles.omp.json",
-		"bubblesextra":             "bubblesextra.omp.json",
-		"bubblesline":              "bubblesline.omp.json",
-		"capr4n":                   "capr4n.omp.json",
-		"catppuccin":               "catppuccin.omp.json",
-		"catppuccin_frappe":        "catppuccin_frappe.omp.json",
-		"catppuccin_latte":         "catppuccin_latte.omp.json",
-		"catppuccin_macchiato":     "catppuccin_macchiato.omp.json",
-		"catppuccin_mocha":         "catppuccin_mocha.omp.json",
-		"cert":                     "cert.omp.json",
-		"chips":                    "chips.omp.json",
-		"cinnamon":                 "cinnamon.omp.json",
-		"clean-detailed":           "clean-detailed.omp.json",
-		"cloud-context":            "cloud-context.omp.json",
-		"cloud-native-azure":       "cloud-native-azure.omp.json",
-		"cobalt2":                  "cobalt2.omp.json",
-		"craver":                   "craver.omp.json",
-		"darkblood":                "darkblood.omp.json",
-		"devious-diamonds":         "devious-diamonds.omp.yaml",
-		"di4am0nd":                 "di4am0nd.omp.json",
-		"dracula":                  "dracula.omp.json",
-		"easy-term":                "easy-term.omp.json",
-		"emodipt":                  "emodipt.omp.json",
-		"emodipt-extend":           "emodipt-extend.omp.json",
-		"fish":                     "fish.omp.json",
-		"free-ukraine":             "free-ukraine.omp.json",
-		"froczh":                   "froczh.omp.json",
-		"glowsticks":               "glowsticks.omp.yaml",
-		"gmay":                     "gmay.omp.json",
-		"grandpa-style":            "grandpa-style.omp.json",
-		"gruvbox":                  "gruvbox.omp.json",
-		"half-life":                "half-life.omp.json",
-		"honukai":                  "honukai.omp.json",
-		"hotstick.minimal":         "hotstick.minimal.omp.json",
-		"hul10":                    "hul10.omp.json",
-		"hunk":                     "hunk.omp.json",
-		"huvix":                    "huvix.omp.json",
-		"if_tea":                   "if_tea.omp.json",
-		"illusi0n":                 "illusi0n.omp.json",
-		"iterm2":                   "iterm2.omp.json",
-		"jandedobbeleer":           "jandedobbeleer.omp.json",
-		"jblab_2021":               "jblab_2021.omp.json",
-		"jonnychipz":               "jonnychipz.omp.json",
-		"json":                     "json.omp.json",
-		"jtracey93":                "jtracey93.omp.json",
-		"jv_sitecorian":            "jv_sitecorian.omp.json",
-		"kali":                     "kali.omp.json",
-		"kushal":                   "kushal.omp.json",
-		"lambda":                   "lambda.omp.json",
-		"lambdageneration":         "lambdageneration.omp.json",
-		"larserikfinholt":          "larserikfinholt.omp.json",
-		"lightgreen":               "lightgreen.omp.json",
-		"marcduiker":               "marcduiker.omp.json",
-		"markbull":                 "markbull.omp.json",
-		"material":                 "material.omp.json",
-		"microverse-power":         "microverse-power.omp.json",
-		"mojada":                   "mojada.omp.json",
-		"montys":                   "montys.omp.json",
-		"mt":                       "mt.omp.json",
-		"multiverse-neon":          "multiverse-neon.omp.json",
-		"negligible":               "negligible.omp.json",
-		"neko":                     "neko.omp.json",
-		"night-owl":                "night-owl.omp.json",
-		"nordtron":                 "nordtron.omp.json",
-		"nu4a":                     "nu4a.omp.json",
-		"onehalf.minimal":          "onehalf.minimal.omp.json",
-		"paradox":                  "paradox.omp.json",
-		"pararussel":               "pararussel.omp.json",
-		"patriksvensson":           "patriksvensson.omp.json",
-		"peru":                     "peru.omp.json",
-		"pixelrobots":              "pixelrobots.omp.json",
-		"plague":                   "plague.omp.json",
-		"poshmon":                  "poshmon.omp.json",
-		"powerlevel10k_classic":    "powerlevel10k_classic.omp.json",
-		"powerlevel10k_lean":       "powerlevel10k_lean.omp.json",
-		"powerlevel10k_modern":     "powerlevel10k_modern.omp.json",
-		"powerlevel10k_rainbow":    "powerlevel10k_rainbow.omp.json",
-		"powerline":                "powerline.omp.json",
-		"probua.minimal":           "probua.minimal.omp.json",
-		"pure":                     "pure.omp.json",
-		"quick-term":               "quick-term.omp.json",
-		"remk":                     "remk.omp.json",
-		"robbyrussell":             "robbyrussell.omp.json",
-		"rudolfs-dark":             "rudolfs-dark.omp.json",
-		"rudolfs-light":            "rudolfs-light.omp.json",
-		"sim-web":                  "sim-web.omp.json",
-		"slim":                     "slim.omp.json",
-		"slimfat":                  "slimfat.omp.json",
-		"smoothie":                 "smoothie.omp.json",
-		"sonicboom_dark":           "sonicboom_dark.omp.json",
-		"sonicboom_light":          "sonicboom_light.omp.json",
-		"sorin":                    "sorin.omp.json",
-		"space":                    "space.omp.json",
-		"spaceship":                "spaceship.omp.json",
-		"star":                     "star.omp.json",
-		"stelbent-compact.minimal": "stelbent-compact.minimal.omp.json",
-		"stelbent.minimal":         "stelbent.minimal.omp.json",
-		"takuya":                   "takuya.omp.json",
-		"the-unnamed":              "the-unnamed.omp.json",
-		"thecyberden":              "thecyberden.omp.json",
-		"tiwahu":                   "tiwahu.omp.json",
-		"tokyo":                    "tokyo.omp.json",
-		"tokyonight_storm":         "tokyonight_storm.omp.json",
-		"tonybaloney":              "tonybaloney.omp.json",
-		"uew":                      "uew.omp.json",
-		"unicorn":                  "unicorn.omp.json",
-		"velvet":                   "velvet.omp.json",
-		"wholespace":               "wholespace.omp.json",
-		"wopian":                   "wopian.omp.json",
-		"xtoys":                    "xtoys.omp.json",
-		"ys":                       "ys.omp.json",
-		"zash":                     "zash.omp.json",
-	}
+// themes maps a theme's short name to its file name; it's a package-level
+// var (instead of a local literal) so isTheme doesn't rebuild it on every call.
+var themes = map[string]string{
+	"1_shell":                  "1_shell.omp.json",
+	"m365princess":             "M365Princess.omp.json",
+	"agnoster":                 "agnoster.omp.json",
+	"agnoster.minimal":         "agnoster.minimal.omp.json",
+	"agnosterplus":             "agnosterplus.omp.json",
+	"aliens":                   "aliens.omp.json",
+	"amro":                     "amro.omp.json",
+	"atomic":                   "atomic.omp.json",
+	"atomicbit":                "atomicBit.omp.json",
+	"avit":                     "avit.omp.json",
+	"blue-owl":                 "blue-owl.omp.json",
+	"blueish":                  "blueish.omp.json",
+	"bubbles":                  "bubbles.omp.json",
+	"bubblesextra":             "bubblesextra.omp.json",
+	"bubblesline":              "bubblesline.omp.json",
+	"capr4n":                   "capr4n.omp.json",
+	"catppuccin":               "catppuccin.omp.json",
+	"catppuccin_frappe":        "catppuccin_frappe.omp.json",
+	"catppuccin_latte":         "catppuccin_latte.omp.json",
+	"catppuccin_macchiato":     "catppuccin_macchiato.omp.json",
+	"catppuccin_mocha":         "catppuccin_mocha.omp.json",
+	"cert":                     "cert.omp.json",
+	"chips":                    "chips.omp.json",
+	"cinnamon":                 "cinnamon.omp.json",
+	"clean-detailed":           "clean-detailed.omp.json",
+	"cloud-context":            "cloud-context.omp.json",
+	"cloud-native-azure":       "cloud-native-azure.omp.json",
+	"cobalt2":                  "cobalt2.omp.json",
+	"craver":                   "craver.omp.json",
+	"darkblood":                "darkblood.omp.json",
+	"devious-diamonds":         "devious-diamonds.omp.yaml",
+	"di4am0nd":                 "di4am0nd.omp.json",
+	"dracula":                  "dracula.omp.json",
+	"easy-term":                "easy-term.omp.json",
+	"emodipt":                  "emodipt.omp.json",
+	"emodipt-extend":           "emodipt-extend.omp.json",
+	"fish":                     "fish.omp.json",
+	"free-ukraine":             "free-ukraine.omp.json",
+	"froczh":                   "froczh.omp.json",
+	"glowsticks":               "glowsticks.omp.yaml",
+	"gmay":                     "gmay.omp.json",
+	"grandpa-style":            "grandpa-style.omp.json",
+	"gruvbox":                  "gruvbox.omp.json",
+	"half-life":                "half-life.omp.json",
+	"honukai":                  "honukai.omp.json",
+	"hotstick.minimal":         "hotstick.minimal.omp.json",
+	"hul10":                    "hul10.omp.json",
+	"hunk":                     "hunk.omp.json",
+	"huvix":                    "huvix.omp.json",
+	"if_tea":                   "if_tea.omp.json",
+	"illusi0n":                 "illusi0n.omp.json",
+	"iterm2":                   "iterm2.omp.json",
+	"jandedobbeleer":           "jandedobbeleer.omp.json",
+	"jblab_2021":               "jblab_2021.omp.json",
+	"jonnychipz":               "jonnychipz.omp.json",
+	"json":                     "json.omp.json",
+	"jtracey93":                "jtracey93.omp.json",
+	"jv_sitecorian":            "jv_sitecorian.omp.json",
+	"kali":                     "kali.omp.json",
+	"kushal":                   "kushal.omp.json",
+	"lambda":                   "lambda.omp.json",
+	"lambdageneration":         "lambdageneration.omp.json",
+	"larserikfinholt":          "larserikfinholt.omp.json",
+	"lightgreen":               "lightgreen.omp.json",
+	"marcduiker":               "marcduiker.omp.json",
+	"markbull":                 "markbull.omp.json",
+	"material":                 "material.omp.json",
+	"microverse-power":         "microverse-power.omp.json",
+	"mojada":                   "mojada.omp.json",
+	"montys":                   "montys.omp.json",
+	"mt":                       "mt.omp.json",
+	"multiverse-neon":          "multiverse-neon.omp.json",
+	"negligible":               "negligible.omp.json",
+	"neko":                     "neko.omp.json",
+	"night-owl":                "night-owl.omp.json",
+	"nordtron":                 "nordtron.omp.json",
+	"nu4a":                     "nu4a.omp.json",
+	"onehalf.minimal":          "onehalf.minimal.omp.json",
+	"paradox":                  "paradox.omp.json",
+	"pararussel":               "pararussel.omp.json",
+	"patriksvensson":           "patriksvensson.omp.json",
+	"peru":                     "peru.omp.json",
+	"pixelrobots":              "pixelrobots.omp.json",
+	"plague":                   "plague.omp.json",
+	"poshmon":                  "poshmon.omp.json",
+	"powerlevel10k_classic":    "powerlevel10k_classic.omp.json",
+	"powerlevel10k_lean":       "powerlevel10k_lean.omp.json",
+	"powerlevel10k_modern":     "powerlevel10k_modern.omp.json",
+	"powerlevel10k_rainbow":    "powerlevel10k_rainbow.omp.json",
+	"powerline":                "powerline.omp.json",
+	"probua.minimal":           "probua.minimal.omp.json",
+	"pure":                     "pure.omp.json",
+	"quick-term":               "quick-term.omp.json",
+	"remk":                     "remk.omp.json",
+	"robbyrussell":             "robbyrussell.omp.json",
+	"rudolfs-dark":             "rudolfs-dark.omp.json",
+	"rudolfs-light":            "rudolfs-light.omp.json",
+	"sim-web":                  "sim-web.omp.json",
+	"slim":                     "slim.omp.json",
+	"slimfat":                  "slimfat.omp.json",
+	"smoothie":                 "smoothie.omp.json",
+	"sonicboom_dark":           "sonicboom_dark.omp.json",
+	"sonicboom_light":          "sonicboom_light.omp.json",
+	"sorin":                    "sorin.omp.json",
+	"space":                    "space.omp.json",
+	"spaceship":                "spaceship.omp.json",
+	"star":                     "star.omp.json",
+	"stelbent-compact.minimal": "stelbent-compact.minimal.omp.json",
+	"stelbent.minimal":         "stelbent.minimal.omp.json",
+	"takuya":                   "takuya.omp.json",
+	"the-unnamed":              "the-unnamed.omp.json",
+	"thecyberden":              "thecyberden.omp.json",
+	"tiwahu":                   "tiwahu.omp.json",
+	"tokyo":                    "tokyo.omp.json",
+	"tokyonight_storm":         "tokyonight_storm.omp.json",
+	"tonybaloney":              "tonybaloney.omp.json",
+	"uew":                      "uew.omp.json",
+	"unicorn":                  "unicorn.omp.json",
+	"velvet":                   "velvet.omp.json",
+	"wholespace":               "wholespace.omp.json",
+	"wopian":                   "wopian.omp.json",
+	"xtoys":                    "xtoys.omp.json",
+	"ys":                       "ys.omp.json",
+	"zash":                     "zash.omp.json",
+}
 
+func isTheme(config string) (string, bool) {
 	themeFile, OK := themes[config]
 	if !OK {
 		log.Debug(config, "is not a theme")

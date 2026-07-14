@@ -266,13 +266,17 @@ func (term *Terminal) Home() string {
 }
 
 func (term *Terminal) RunCommand(command string, args ...string) (string, error) {
+	return term.RunCommandWithEnv(command, nil, args...)
+}
+
+func (term *Terminal) RunCommandWithEnv(command string, envs []string, args ...string) (string, error) {
 	defer log.Trace(time.Now(), append([]string{command}, args...)...)
 
 	if cacheCommand, ok := term.cmdCache.Get(command); ok {
 		command = cacheCommand
 	}
 
-	output, err := cmd.Run(command, args...)
+	output, err := cmd.RunWithEnv(command, envs, args...)
 	if err != nil {
 		log.Error(err)
 	}
@@ -293,17 +297,43 @@ func (term *Terminal) RunShellCommand(shell, command string) string {
 
 func (term *Terminal) CommandPath(command string) string {
 	defer log.Trace(time.Now(), command)
+
+	// L1: in-memory, unbounded for the lifetime of this process.
 	if cmdPath, ok := term.cmdCache.Get(command); ok {
 		log.Debug(cmdPath)
 		return cmdPath
 	}
 
+	// L2: session-persisted lookups, shared across prompt invocations within
+	// the same shell session. Avoids re-running exec.LookPath (a PATH x
+	// PATHEXT stat storm on Windows, worst for missing commands) on every
+	// prompt render.
+	if cachedPath, found, ok := cache.GetPersistedCommandPath(command); ok {
+		if !found {
+			log.Debug("command not found (cached)")
+			return ""
+		}
+
+		// Revalidate cheaply; a stale/moved binary should fall through to a
+		// fresh LookPath rather than returning a dead path.
+		if _, err := os.Stat(cachedPath); err == nil {
+			term.cmdCache.Set(command, cachedPath)
+			log.Debug(cachedPath)
+			return cachedPath
+		}
+
+		log.Debugf("cached command path no longer valid: %s", cachedPath)
+	}
+
 	cmdPath, err := exec.LookPath(command)
 	if err == nil {
 		term.cmdCache.Set(command, cmdPath)
+		cache.PersistCommandPath(command, cmdPath, true)
 		log.Debug(cmdPath)
 		return cmdPath
 	}
+
+	cache.PersistCommandPath(command, "", false)
 
 	log.Error(err)
 	return ""
