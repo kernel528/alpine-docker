@@ -9,11 +9,11 @@
 ## Build, Test, and Development Commands
 - Build locally:
   ```sh
-  docker build -t kernel528/alpine:3.24.1 -f Dockerfile .
+  docker build -t kernel528/alpine:3.24.1_1 -f Dockerfile .
   ```
 - Run a quick smoke test:
   ```sh
-  docker run -it --rm --name alpine3 kernel528/alpine:3.24.1 bash
+  docker run -it --rm --name alpine3 kernel528/alpine:3.24.1_1 bash
   ```
 
 ## Coding Style & Naming Conventions
@@ -26,8 +26,8 @@
 - When changing shell config files, confirm the container starts with the expected shell (`/bin/zsh`) and that `sudo` works for the default user.
 
 ## Commit & Pull Request Guidelines
-- Commit messages are concise and descriptive (e.g., “Updated to alpine 3.24.1 release.”).
-- Branch flow: create a full-version branch (e.g., `3.24.1`), merge to `3.24`, then merge to `main` and tag the release.
+- Commit messages are concise and descriptive (e.g., “Refresh Alpine 3.24.1 image dependencies.”).
+- Branch flow: create a full-version branch (e.g., `3.24.1_1`), merge to `3.24`, then merge to `main` and tag the release.
 - PRs should update `VERSION.md`, `README.md` examples, and `.drone.yml` tags as needed.
 
 ## Security & Configuration Tips
