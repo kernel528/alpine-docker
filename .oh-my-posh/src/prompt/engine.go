@@ -2,6 +2,7 @@ package prompt
 
 import (
 	"strings"
+	"sync"
 
 	"github.com/jandedobbeleer/oh-my-posh/src/cache"
 	"github.com/jandedobbeleer/oh-my-posh/src/color"
@@ -18,29 +19,35 @@ var cycle *color.Cycle = &color.Cycle{}
 
 type Engine struct {
 	Env                   runtime.Environment
+	streamingResults      chan *config.Segment
+	abort                 chan struct{}
+	done                  chan struct{}
 	Config                *config.Config
 	activeSegment         *config.Segment
 	previousActiveSegment *config.Segment
+	pendingSegments       sync.Map
 	rprompt               string
 	Overflow              config.Overflow
 	prompt                strings.Builder
-	rpromptLength         int
-	Padding               int
+	allBlocks             []*config.Block
 	currentLineLength     int
+	Padding               int
+	rpromptLength         int
 	Plain                 bool
 	forceRender           bool
 }
 
 const (
-	PRIMARY   = "primary"
-	TRANSIENT = "transient"
-	DEBUG     = "debug"
-	SECONDARY = "secondary"
-	RIGHT     = "right"
-	TOOLTIP   = "tooltip"
-	VALID     = "valid"
-	ERROR     = "error"
-	PREVIEW   = "preview"
+	PRIMARY         = "primary"
+	TRANSIENT       = "transient"
+	TRANSIENT_RIGHT = "transient-right"
+	DEBUG           = "debug"
+	SECONDARY       = "secondary"
+	RIGHT           = "right"
+	TOOLTIP         = "tooltip"
+	VALID           = "valid"
+	ERROR           = "error"
+	PREVIEW         = "preview"
 )
 
 func (e *Engine) write(txt string) {
@@ -162,6 +169,11 @@ func (e *Engine) shouldFill(filler string, padLength int) (string, bool) {
 		return "", false
 	}
 
+	if padLength < 0 {
+		log.Debug("padding length is negative")
+		return "", false
+	}
+
 	e.Padding = padLength
 
 	defer func() {
@@ -197,14 +209,28 @@ func (e *Engine) getTitleTemplateText() string {
 	return ""
 }
 
-func (e *Engine) renderBlock(block *config.Block, cancelNewline bool) bool {
-	blockText, length := e.writeBlockSegments(block)
+// renderLaunchedBlock renders a block using pre-collected segment results
+// (see drainBlockResults). executed must be fully populated for every block
+// in the prompt before this is called so that cross-block .Segments.X
+// dependencies resolve in both directions.
+func (e *Engine) renderLaunchedBlock(block *config.Block, results []*config.Segment, executed map[string]bool, cancelNewline bool) bool {
+	var blockText string
+	var length int
+
+	if results != nil {
+		blockText, length = e.renderBlockSegments(results, block, executed)
+	}
 
 	// do not print anything when we don't have any text unless forced
 	if !block.Force && length == 0 {
 		return false
 	}
 
+	return e.writeBlock(block, blockText, length, cancelNewline)
+}
+
+// writeBlock handles the common logic for writing a block to the prompt
+func (e *Engine) writeBlock(block *config.Block, blockText string, length int, cancelNewline bool) bool {
 	defer func() {
 		e.applyPowerShellBleedPatch()
 	}()
@@ -273,6 +299,56 @@ func (e *Engine) renderBlock(block *config.Block, cancelNewline bool) bool {
 	return true
 }
 
+// renderBlockFromCache re-renders a block using existing segment data without re-execution
+func (e *Engine) renderBlockFromCache(block *config.Block, cancelNewline bool) bool {
+	if block.RestartCycle {
+		cycle = &e.Config.Cycle
+	}
+
+	// Re-render all segments in the block
+	for segmentIndex, segment := range block.Segments {
+		// Allow pending segments to render (they show "..." text)
+		if !segment.Pending && !segment.Enabled && segment.ResolveStyle() != config.Accordion {
+			continue
+		}
+
+		// Render segment text (will use pending state if still pending)
+		if !segment.Render(segmentIndex, e.forceRender) {
+			continue
+		}
+
+		if colors, newCycle := cycle.Loop(); colors != nil {
+			cycle = &newCycle
+			segment.Foreground = colors.Foreground
+			segment.Background = colors.Background
+		}
+
+		if terminal.Len() == 0 && len(block.LeadingDiamond) > 0 {
+			segment.LeadingDiamond = block.LeadingDiamond
+		}
+
+		e.setActiveSegment(segment)
+		e.renderActiveSegment()
+	}
+
+	if e.activeSegment != nil && len(block.TrailingDiamond) > 0 {
+		e.activeSegment.TrailingDiamond = block.TrailingDiamond
+	}
+
+	e.writeSeparator(true)
+	e.activeSegment = nil
+	e.previousActiveSegment = nil
+
+	blockText, length := terminal.String()
+
+	// do not print anything when we don't have any text unless forced
+	if !block.Force && length == 0 {
+		return false
+	}
+
+	return e.writeBlock(block, blockText, length, cancelNewline)
+}
+
 func (e *Engine) applyPowerShellBleedPatch() {
 	// when in PowerShell, we need to clear the line after the prompt
 	// to avoid the background being printed on the next line
@@ -312,7 +388,8 @@ func (e *Engine) renderActiveSegment() {
 		terminal.Write(background, color.Background, e.activeSegment.LeadingDiamond)
 		terminal.Write(color.Background, color.Foreground, e.activeSegment.Text())
 	case config.Accordion:
-		if e.activeSegment.Enabled {
+		// Render accordion segments if enabled OR pending (pending shows "..." text)
+		if e.activeSegment.Enabled || e.activeSegment.Pending {
 			terminal.Write(color.Background, color.Foreground, e.activeSegment.Text())
 		}
 	}
@@ -483,6 +560,11 @@ func (e *Engine) rectifyTerminalWidth(diff int) {
 	}
 
 	e.Env.Flags().TerminalWidth += diff
+}
+
+func (e *Engine) cancelNewline() bool {
+	row, _ := e.Env.CursorPosition()
+	return e.Env.Flags().Cleared || e.Env.Flags().PromptCount == 1 || row == 1
 }
 
 // New returns a prompt engine initialized with the

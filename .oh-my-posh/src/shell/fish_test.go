@@ -16,7 +16,10 @@ set --global _omp_transient_prompt 1
 set --global _omp_ftcs_marks 1
 "$_omp_executable" upgrade --auto
 "$_omp_executable" notice
-set --global _omp_prompt_mark 1`
+set --global _omp_prompt_mark 1
+set --global _omp_cursor_positioning 1
+set --global _omp_enable_streaming 1
+set --global _omp_transient_rprompt 1`
 
 	assert.Equal(t, want, got)
 }

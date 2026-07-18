@@ -20,6 +20,32 @@ import (
 const (
 	languageTemplate = " {{ if .Error }}{{ .Error }}{{ else }}{{ .Full }}{{ end }} "
 	noVersion        = "NO VERSION"
+
+	versionFlagArg      = "--version"
+	versionFlagShortArg = "-version"
+	versionArg          = "version"
+
+	versionRegex         = `(?P<version>((?P<major>[0-9]+).(?P<minor>[0-9]+).(?P<patch>[0-9]+)))`
+	versionRegexPrefixed = `(?:(?P<version>((?P<major>[0-9]+).(?P<minor>[0-9]+).(?P<patch>[0-9]+))))`
+	versionRegexSemver   = `(?:(?P<version>((?P<major>[0-9]+).(?P<minor>[0-9]+).(?P<patch>[0-9]+)(-(?P<prerelease>[a-z]+).(?P<buildmetadata>[0-9]+))?)))`
+
+	fileName        = "package.json"
+	pubspecFileName = "pubspec.yaml"
+
+	asdfToolName   = "asdf"
+	bunToolName    = "bun"
+	dartToolName   = "dart"
+	denoToolName   = "deno"
+	dotnetToolName = "dotnet"
+	fvmToolName    = "fvm"
+	juliaToolName  = "julia"
+	mojoToolName   = "mojo"
+	nodeToolName   = "node"
+	npmToolName    = "npm"
+	phpToolName    = "php"
+	pnpmToolName   = "pnpm"
+	pythonToolName = "python"
+	yarnToolName   = "yarn"
 )
 
 type loadContext func()
@@ -47,6 +73,7 @@ type cmd struct {
 	regex              string
 	versionURLTemplate string
 	args               []string
+	envs               []string
 }
 
 func (c *cmd) parse(versionInfo string) (*Version, error) {
@@ -79,6 +106,8 @@ type Language struct {
 	versionURLTemplate string
 	name               string
 	commands           []*cmd
+	tooling            map[string]*cmd
+	defaultTooling     []string
 	projectFiles       []string
 	folders            []string
 	extensions         []string
@@ -106,6 +135,14 @@ const (
 	LanguageExtensions options.Option = "extensions"
 	// LanguageFolders the list of folders to validate
 	LanguageFolders options.Option = "folders"
+	// LanguageProjectFiles the list of project files to validate
+	LanguageProjectFiles options.Option = "project_files"
+	// Tooling allows enabling additional version fetching tools
+	Tooling options.Option = "tooling"
+	// Tools defines custom tools (executable, args, regex) for a configured language
+	Tools options.Option = "tools"
+	// LanguageName identifies a configured language segment; used as its cache key and preset lookup key
+	LanguageName options.Option = "name"
 )
 
 func (l *Language) getName() string {
@@ -115,10 +152,13 @@ func (l *Language) getName() string {
 }
 
 func (l *Language) Enabled() bool {
-	l.name = l.getName()
+	if l.name == "" {
+		l.name = l.getName()
+	}
 	// override default extensions if needed
 	l.extensions = l.options.StringArray(LanguageExtensions, l.extensions)
 	l.folders = l.options.StringArray(LanguageFolders, l.folders)
+	l.projectFiles = l.options.StringArray(LanguageProjectFiles, l.projectFiles)
 	inHomeDir := func() bool {
 		return l.env.Pwd() == l.env.Home()
 	}
@@ -156,6 +196,8 @@ func (l *Language) Enabled() bool {
 		}
 	}
 
+	l.loadTooling()
+
 	if !enabled || !l.options.Bool(options.FetchVersion, true) {
 		return enabled
 	}
@@ -176,6 +218,26 @@ func (l *Language) Enabled() bool {
 	return enabled
 }
 
+// loadTooling builds the commands list from the tooling map based on the tooling configuration.
+// Users can override the default tooling via the Tooling option.
+// This allows specifying which tools should be used to fetch versions
+// (e.g., "uv" for Python to use UV package manager).
+func (l *Language) loadTooling() {
+	enabledTools := l.options.StringArray(Tooling, l.defaultTooling)
+	if len(enabledTools) == 0 {
+		return
+	}
+
+	var commands []*cmd
+	for _, tool := range enabledTools {
+		if command, exists := l.tooling[tool]; exists {
+			commands = append(commands, command)
+		}
+	}
+
+	l.commands = commands
+}
+
 func (l *Language) hasLanguageFiles() bool {
 	return slices.ContainsFunc(l.extensions, l.env.HasFiles)
 }
@@ -189,6 +251,12 @@ func (l *Language) hasProjectFiles() bool {
 	}
 
 	return false
+}
+
+// InProjectDir reports whether the working directory is within a project
+// matched by one of the segment's projectFiles.
+func (l *Language) InProjectDir() bool {
+	return l.projectRoot != nil
 }
 
 func (l *Language) hasLanguageFolders() bool {
@@ -248,10 +316,11 @@ func (l *Language) runCommand(command *cmd) (string, error) {
 			return "", errors.New(noVersion)
 		}
 
-		versionStr, err := l.env.RunCommand(command.executable, command.args...)
+		versionStr, err := l.env.RunCommandWithEnv(command.executable, command.envs, command.args...)
+
 		if exitErr, ok := err.(*runtime.CommandError); ok {
 			l.exitCode = exitErr.ExitCode
-			return "", fmt.Errorf("err executing %s with %s", command.executable, command.args)
+			return "", fmt.Errorf("err executing %s with %v", command.executable, command.args)
 		}
 
 		return versionStr, nil
@@ -298,7 +367,7 @@ func (l *Language) buildVersionURL() {
 }
 
 func (l *Language) hasNodePackage(name string) bool {
-	packageJSON := l.env.FileContent("package.json")
+	packageJSON := l.env.FileContent(fileName)
 
 	var packageData map[string]any
 	if err := json.Unmarshal([]byte(packageJSON), &packageData); err != nil {
@@ -320,7 +389,6 @@ func (l *Language) hasNodePackage(name string) bool {
 func (l *Language) nodePackageVersion(name string) (string, error) {
 	folder := filepath.Join(l.env.Pwd(), "node_modules", name)
 
-	const fileName string = "package.json"
 	if !l.env.HasFilesInDir(folder, fileName) {
 		return "", fmt.Errorf("%s not found in %s", fileName, folder)
 	}

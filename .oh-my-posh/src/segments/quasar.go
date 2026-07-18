@@ -24,14 +24,17 @@ type Quasar struct {
 }
 
 func (q *Quasar) Enabled() bool {
+	const quasarToolName = "quasar"
+
 	q.projectFiles = []string{"quasar.config", "quasar.config.js"}
-	q.commands = []*cmd{
-		{
-			executable: "quasar",
-			args:       []string{"--version"},
-			regex:      `(?P<version>((?P<major>[0-9]+).(?P<minor>[0-9]+).(?P<patch>[0-9]+)))`,
+	q.tooling = map[string]*cmd{
+		quasarToolName: {
+			executable: quasarToolName,
+			args:       []string{versionFlagArg},
+			regex:      versionRegex,
 		},
 	}
+	q.defaultTooling = []string{quasarToolName}
 	q.versionURLTemplate = "https://github.com/quasarframework/quasar/releases/tag/quasar-v{{ .Full }}"
 
 	if !q.Language.Enabled() {
@@ -46,7 +49,7 @@ func (q *Quasar) Enabled() bool {
 }
 
 func (q *Quasar) Template() string {
-	return " \uea6a {{.Full}}{{ if .HasVite }} \ueb29 {{ .Vite.Version }}{{ end }} "
+	return " \ue87f {{.Full}}{{ if .HasVite }} \ueb29 {{ .Vite.Version }}{{ end }} "
 }
 
 func (q *Quasar) fetchDependencies() {

@@ -11,6 +11,7 @@ export PYENV_VIRTUALENV_DISABLE_PROMPT=1
 # global variables
 _omp_start_time=''
 _omp_stack_count=0
+_omp_job_count=0
 _omp_execution_time=-1
 _omp_no_status=true
 _omp_status=0
@@ -22,7 +23,7 @@ _omp_cursor_positioning=0
 _omp_ftcs_marks=0
 
 # start timer on command start
-PS0='${_omp_start_time:0:$((_omp_start_time="$(_omp_start_timer)",0))}$(_omp_ftcs_command_start)'
+PS0='${_omp_start_time:0:$((_omp_start_time="$(_omp_milliseconds)",0))}$(_omp_ftcs_command_start)'
 
 # set secondary prompt
 _omp_secondary_prompt=$(
@@ -51,14 +52,61 @@ function _omp_set_cursor_position() {
     export POSH_CURSOR_COLUMN=${COL}
 }
 
-function _omp_start_timer() {
+function _omp_milliseconds() {
+    if ((BASH_VERSINFO[0] >= 5)); then
+        # EPOCHREALTIME is epoch time with microsecond precision and a
+        # locale-dependent decimal separator, strip anything but the digits
+        local epoch_micros=${EPOCHREALTIME//[!0-9]/}
+        echo $((epoch_micros / 1000))
+        return
+    fi
+
+    # EPOCHREALTIME requires bash 5.0 or newer
     "$_omp_executable" get millis
 }
 
+# percent-encode $1, byte-wise, keeping RFC 3986 unreserved characters literal
+function _omp_urlencode() {
+    local LC_ALL=C
+    local str=$1 encoded='' ch i
+    for ((i = 0; i < ${#str}; i++)); do
+        ch=${str:i:1}
+        case $ch in
+        [A-Za-z0-9._~-])
+            encoded+=$ch
+            ;;
+        *)
+            printf -v ch '%%%02X' "'$ch"
+            encoded+=$ch
+            ;;
+        esac
+    done
+    printf '%s' "$encoded"
+}
+
 function _omp_ftcs_command_start() {
-    if [[ $_omp_ftcs_marks == 1 ]]; then
-        printf '\e]133;C\a'
+    if [[ $_omp_ftcs_marks != 1 ]]; then
+        return
     fi
+
+    # the command comes from history: format is "  501  command", or
+    # "  501* command" when the entry was modified; commands are missing
+    # entirely when history is off or HISTCONTROL ignores them
+    local cmd=''
+    if [[ -o history ]]; then
+        cmd=$(HISTTIMEFORMAT='' builtin history 1)
+        cmd=${cmd#"${cmd%%[![:space:]]*}"} # strip the leading padding
+        cmd=${cmd#"${cmd%%[!0-9]*}"}       # strip the history number
+        cmd=${cmd#??}                      # strip the modified flag and separator
+    fi
+
+    if [[ -n $cmd ]]; then
+        # advertise the command line via kitty's cmdline_url= extension
+        printf '\e]133;C;cmdline_url=%s\a' "$(_omp_urlencode "$cmd")"
+        return
+    fi
+
+    printf '\e]133;C\a'
 }
 
 # template function for context loading
@@ -85,6 +133,7 @@ function _omp_get_primary() {
                 --pipestatus="${_omp_pipestatus[*]}" \
                 --no-status="$_omp_no_status" \
                 --execution-time="$_omp_execution_time" \
+                --job-count="$_omp_job_count" \
                 --stack-count="$_omp_stack_count" \
                 --terminal-width="${COLUMNS-0}" |
                 tr -d '\0'
@@ -114,10 +163,13 @@ function _omp_hook() {
     fi
 
     _omp_stack_count=$((${#DIRSTACK[@]} - 1))
+    local _omp_jobs=()
+    _omp_jobs=($(jobs -p 2>/dev/null))
+    _omp_job_count=${#_omp_jobs[@]}
 
     _omp_execution_time=-1
     if [[ $_omp_start_time ]]; then
-        local omp_now=$("$_omp_executable" get millis)
+        local omp_now=$(_omp_milliseconds)
         _omp_execution_time=$((omp_now - _omp_start_time))
         _omp_no_status=false
     fi
@@ -158,7 +210,13 @@ function _omp_install_hook() {
         prompt_command+=("$cmd")
     done
 
-    PROMPT_COMMAND=("${prompt_command[@]}" _omp_hook)
+    # When VS Code shell integration is active, prepend so _omp_hook sets PS1 before
+    # VS Code's __vsc_prompt_cmd_original wraps it with A/B shell integration sequences.
+    if [[ "${TERM_PROGRAM-}" == "vscode" ]]; then
+        PROMPT_COMMAND=(_omp_hook "${prompt_command[@]}")
+    else
+        PROMPT_COMMAND=("${prompt_command[@]}" _omp_hook)
+    fi
 }
 
 _omp_install_hook

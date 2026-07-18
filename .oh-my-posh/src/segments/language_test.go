@@ -40,7 +40,7 @@ func bootStrapLanguageTest(args *languageArgs) *Language {
 
 	for _, command := range args.commands {
 		env.On("HasCommand", command.executable).Return(args.hasvalue(command.executable, args.enabledCommands))
-		env.On("RunCommand", command.executable, command.args).Return(args.version, args.expectedError)
+		env.On("RunCommandWithEnv", command.executable, command.envs, command.args).Return(args.version, args.expectedError)
 	}
 
 	for _, extension := range args.extensions {
@@ -523,17 +523,110 @@ func TestLanguageHyperlinkTemplatePropertyTakesPriority(t *testing.T) {
 	assert.Equal(t, "https://custom/url/template/1.3", lang.URL)
 }
 
+func TestLanguageTooling(t *testing.T) {
+	cases := []struct {
+		Case            string
+		ExpectedFirst   string
+		ExpectedVersion string
+		ToolVersion     string
+		DefaultVersion  string
+		Tooling         []string
+		DefaultTooling  []string
+		EnabledTools    []string
+	}{
+		{
+			Case:            "Custom tooling overrides default",
+			Tooling:         []string{"mytool"},
+			DefaultTooling:  []string{"unicorn"},
+			EnabledTools:    []string{"mytool", "unicorn"},
+			ExpectedFirst:   "mytool",
+			ExpectedVersion: "2.0.0",
+			ToolVersion:     "2.0.0",
+			DefaultVersion:  "1.0.0",
+		},
+		{
+			Case:            "Default tooling used when no override",
+			Tooling:         nil,
+			DefaultTooling:  []string{"unicorn"},
+			EnabledTools:    []string{"mytool", "unicorn"},
+			ExpectedFirst:   "unicorn",
+			ExpectedVersion: "1.0.0",
+			ToolVersion:     "2.0.0",
+			DefaultVersion:  "1.0.0",
+		},
+		{
+			Case:            "Tool not available falls back to next",
+			Tooling:         []string{"mytool", "unicorn"},
+			DefaultTooling:  []string{"unicorn"},
+			EnabledTools:    []string{"unicorn"},
+			ExpectedFirst:   "mytool",
+			ExpectedVersion: "1.0.0",
+			ToolVersion:     "",
+			DefaultVersion:  "1.0.0",
+		},
+	}
+
+	for _, tc := range cases {
+		env := new(mock.Environment)
+		env.On("Pwd").Return("/usr/home/project")
+		env.On("Home").Return("/usr/home")
+		env.On("HasFiles", uni).Return(true)
+
+		hasUnicorn := slices.Contains(tc.EnabledTools, "unicorn")
+		env.On("HasCommand", "unicorn").Return(hasUnicorn)
+		if hasUnicorn {
+			env.On("RunCommandWithEnv", "unicorn", []string(nil), []string{"--version"}).Return(tc.DefaultVersion, nil)
+		}
+
+		hasToolCommand := slices.Contains(tc.EnabledTools, "mytool")
+		env.On("HasCommand", "mytool").Return(hasToolCommand)
+		if hasToolCommand {
+			env.On("RunCommandWithEnv", "mytool", []string(nil), []string{"--version"}).Return(tc.ToolVersion, nil)
+		}
+
+		props := options.Map{
+			options.FetchVersion: true,
+		}
+		if tc.Tooling != nil {
+			props[Tooling] = tc.Tooling
+		}
+
+		l := &Language{
+			extensions:     []string{uni},
+			defaultTooling: tc.DefaultTooling,
+			tooling: map[string]*cmd{
+				"unicorn": {
+					executable: "unicorn",
+					args:       []string{"--version"},
+					regex:      "(?P<version>.*)",
+				},
+				"mytool": {
+					executable: "mytool",
+					args:       []string{"--version"},
+					regex:      "(?P<version>.*)",
+				},
+			},
+		}
+		l.Init(props, env)
+
+		assert.True(t, l.Enabled(), tc.Case)
+		assert.Equal(t, tc.ExpectedFirst, l.commands[0].executable, tc.Case)
+		assert.Equal(t, tc.ExpectedVersion, l.Full, tc.Case)
+	}
+}
+
 type mockedLanguageParams struct {
 	cmd           string
 	versionParam  string
 	versionOutput string
 	extension     string
+	envs          []string
 }
 
 func getMockedLanguageEnv(params *mockedLanguageParams) (*mock.Environment, options.Map) {
 	env := new(mock.Environment)
 	env.On("HasCommand", params.cmd).Return(true)
-	env.On("RunCommand", params.cmd, []string{params.versionParam}).Return(params.versionOutput, nil)
+	env.On("RunCommandWithEnv", params.cmd, params.envs, []string{params.versionParam}).Return(params.versionOutput, nil)
 	env.On("HasFiles", params.extension).Return(true)
 	env.On("Pwd").Return("/usr/home/project")
 	env.On("Home").Return("/usr/home")

@@ -19,9 +19,11 @@ Supports:
 - PHP project (`composer.json`)
 - Dart project (`pubspec.yaml`)
 - Any nuspec based project (`*.nuspec`, first file match info is displayed)
-- .NET project (`*.sln`, `*.slnf`, `*.slnx`, `*.csproj`, `*.vbproj` or `*.fsproj`, first file match info is displayed)
+- .NET project (`*.sln`, `*.slnf`, `*.slnx`, `*.csproj`, `*.vbproj` or `*.fsproj`, first file match info is displayed). When the
+  matched project doesn't define a `TargetFramework`, it's resolved from the nearest `Directory.Build.props` up the directory tree
 - Julia project (`JuliaProject.toml`, `Project.toml`)
 - PowerShell project (`*.psd1`, first file match info is displayed)
+- Lean 4 project (`lakefile.lean`, `lakefile.toml`)
 
 ## Sample Configuration
 
@@ -41,10 +43,18 @@ import Config from "@site/src/components/Config.js";
 
 ## Options
 
-| Name             |   Type    | Default | Description                                                                                                         |
-| ---------------- | :-------: | :-----: | ------------------------------------------------------------------------------------------------------------------- |
-| `always_enabled` | `boolean` | `false` | always show the segment                                                                                             |
-| `<type>_files`   |  `array`  |  `[]`   | override the project's files to validate for. Use the `.Type` values listed below to override (e.g. `dotnet_files`) |
+| Name                           |   Type    | Default | Description                                                                                                         |
+| ------------------------------ | :-------: | :-----: | -------------------------------------------------------------------------------------------------------------------- |
+| `always_enabled`               | `boolean` | `false` | always show the segment                                                                                             |
+| `<type>_files`                 |  `array`  |  `[]`   | override the project's files to validate for. Use the `.Type` values listed below to override (e.g. `dotnet_files`) |
+| `priority`                     |  `array`  |  `[]`   | reorder the project types to check first. Use the `.Type` values listed below (e.g. `["php", "node"]`)              |
+| `resolve_target_from_solution` | `boolean` | `true`  | when a `.sln`/`.slnx` is matched, scan subdirectories for project files to extract `TargetFramework`                |
+| `solution_search_depth`        |   `int`   |  `2`    | maximum directory depth to scan for project files when resolving from a solution                                    |
+
+When a directory contains files for more than one project type, `priority` controls which one wins. Types listed in
+`priority` are checked first, in the given order; any type not listed keeps its default position. For example, with
+both `package.json` and `composer.json` present, setting `priority: ["php"]` makes the PHP project win instead of
+the default Node.js one.
 
 ## Template ([info][templates])
 
@@ -60,7 +70,7 @@ import Config from "@site/src/components/Config.js";
 
 | Name       | Type     | Description                                                                                                                                                                                      |
 | ---------- | -------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `.Type`    | `string` | The type of project:<ul><li>`node`</li><li>`deno`</li><li>`jsr`</li><li>`cargo`</li><li>`python`</li><li>`mojo`</li><li>`php`</li><li>`dart`</li><li>`nuspec`</li><li>`dotnet`</li><li>`julia`</li><li>`powershell`</li></ul> |
+| `.Type`    | `string` | The type of project:<ul><li>`node`</li><li>`deno`</li><li>`jsr`</li><li>`cargo`</li><li>`python`</li><li>`mojo`</li><li>`php`</li><li>`dart`</li><li>`nuspec`</li><li>`dotnet`</li><li>`julia`</li><li>`powershell`</li><li>`lake`</li></ul> |
 | `.Version` | `string` | The version of your project                                                                                                                                                                      |
 | `.Target`  | `string` | The target framework/language version of your project                                                                                                                                            |
 | `.Name`    | `string` | The name of your project                                                                                                                                                                         |

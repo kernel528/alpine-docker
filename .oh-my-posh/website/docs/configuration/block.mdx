@@ -33,6 +33,7 @@ import Config from "@site/src/components/Config.js";
 | `trailing_diamond` | `string`  |
 | `segments`         | `array`   |
 | `force`            | `boolean` |
+| `restart_cycle`    | `boolean` |
 | `index`            | `int`     |
 
 ### Type
@@ -66,10 +67,12 @@ to be repeated to this property. Add this property to the _right_ aligned block.
 
 <Config
   data={{
-    block: {
-      alignment: "right",
-      filler: ".",
-    },
+    blocks: [
+      {
+        alignment: "right",
+        filler: ".",
+      },
+    ],
   }}
 />
 
@@ -86,11 +89,13 @@ empty space when the right block is hidden or drawn on a newline due to overflow
 
 <Config
   data={{
-    block: {
-      alignment: "right",
-      overflow: "hide",
-      filler: "{{ if .Overflow }} {{ else }}-{{ end }}",
-    },
+    blocks: [
+      {
+        alignment: "right",
+        overflow: "hide",
+        filler: "{{ if .Overflow }} {{ else }}-{{ end }}",
+      },
+    ],
   }}
 />
 
@@ -120,6 +125,34 @@ Array of one or more [segments][segment].
 
 When set to `true`, the block will always be rendered, even if all segments are empty. Defaults to `false`.
 
+### Restart Cycle
+
+When a [color cycle][cycle] is defined, its colors are shared across every block in the prompt and keep
+rotating from one block to the next. Set `restart_cycle` to `true` to make a block start the cycle over from
+its first color instead of continuing where the previous block left off. Defaults to `false`.
+
+This is useful for a two-line prompt where you always want the second line to begin with the cycle's first
+color, regardless of how many segments the first line rendered.
+
+<Config
+  data={{
+    blocks: [
+      {
+        type: "prompt",
+        alignment: "left",
+        segments: [],
+      },
+      {
+        type: "prompt",
+        alignment: "left",
+        newline: true,
+        restart_cycle: true,
+        segments: [],
+      },
+    ],
+  }}
+/>
+
 ### Index
 
 The index of the block in the configuration. This is used to [override] a specific block in a base configuration.
@@ -127,5 +160,6 @@ This is a 1-based index, so the first block has an index of `1`.
 
 [ble.sh]: https://github.com/akinomyoga/ble.sh
 [color-overrides]: /docs/configuration/colors#color-overrides
+[cycle]: /docs/configuration/colors#cycle
 [segment]: segment.mdx
 [override]: /docs/configuration/general#extends

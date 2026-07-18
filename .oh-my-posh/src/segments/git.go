@@ -61,22 +61,26 @@ func (s *GitStatus) add(code string) {
 }
 
 const (
-	// DisableWithJJ disables the git segment when there's a .jj directory in the parent file path
-	DisableWithJJ options.Option = "disable_with_jj"
 	// FetchStatus fetches the status of the repository
 	FetchStatus options.Option = "fetch_status"
 	// FetchPushStatus fetches the push-remote status
 	FetchPushStatus options.Option = "fetch_push_status"
 	// IgnoreStatus allows to ignore certain repo's for status information
 	IgnoreStatus options.Option = "ignore_status"
-	// FetchWorktreeCount fetches the worktree count
-	FetchWorktreeCount options.Option = "fetch_worktree_count"
 	// FetchUpstreamIcon fetches the upstream icon
 	FetchUpstreamIcon options.Option = "fetch_upstream_icon"
 	// FetchBareInfo fetches the bare repo status
 	FetchBareInfo options.Option = "fetch_bare_info"
 	// FetchUser fetches the current user for the repo
 	FetchUser options.Option = "fetch_user"
+	// UntrackedModes list the optional untracked files mode per repo
+	UntrackedModes options.Option = "untracked_modes"
+	// IgnoreSubmodules list the optional ignore-submodules mode per repo
+	IgnoreSubmodules options.Option = "ignore_submodules"
+	// MappedBranches allows overriding certain branches with an icon/text
+	MappedBranches options.Option = "mapped_branches"
+	// DisableWithJJ disables the git segment when there's a .jj directory in the parent file path
+	DisableWithJJ options.Option = "disable_with_jj"
 
 	// BranchIcon the icon to use as branch indicator
 	BranchIcon options.Option = "branch_icon"
@@ -118,12 +122,6 @@ const (
 	GitlabIcon options.Option = "gitlab_icon"
 	// GitIcon shows when the upstream can't be identified
 	GitIcon options.Option = "git_icon"
-	// UntrackedModes list the optional untracked files mode per repo
-	UntrackedModes options.Option = "untracked_modes"
-	// IgnoreSubmodules list the optional ignore-submodules mode per repo
-	IgnoreSubmodules options.Option = "ignore_submodules"
-	// MappedBranches allows overriding certain branches with an icon/text
-	MappedBranches options.Option = "mapped_branches"
 
 	DETACHED     = "(detached)"
 	BRANCHPREFIX = "ref: refs/heads/"
@@ -151,7 +149,6 @@ type Git struct {
 	ShortHash      string
 	Hash           string
 	BranchStatus   string
-	Upstream       string
 	HEAD           string
 	UpstreamIcon   string
 	UpstreamURL    string
@@ -189,13 +186,13 @@ func (g *Git) Enabled() bool {
 	}
 
 	fetchUser := g.options.Bool(FetchUser, false)
-	if fetchUser {
-		g.setUser()
-	}
-
 	g.RepoName = g.repoName()
 
 	if g.IsBare {
+		if fetchUser {
+			g.setUser()
+		}
+
 		g.getBareRepoInfo()
 		return true
 	}
@@ -210,19 +207,36 @@ func (g *Git) Enabled() bool {
 		displayStatus = false
 	}
 
+	// Phase 1: setUser is independent, run it alongside setStatus
+	var wg sync.WaitGroup
+
+	if fetchUser {
+		wg.Go(g.setUser)
+	}
+
 	if displayStatus {
 		g.setStatus()
-		g.setHEADStatus()
+
+		// Phase 2: fan out work that depends only on setStatus results
+		wg.Go(g.setHEADStatus)
+		wg.Go(g.setPushStatus)
+
+		if g.options.Bool(FetchUpstreamIcon, false) {
+			wg.Go(func() {
+				g.UpstreamIcon = g.getUpstreamIcon()
+			})
+		}
+
 		g.setBranchStatus()
-		g.setPushStatus()
 	} else {
 		g.updateHEADReference()
+
+		if g.options.Bool(FetchUpstreamIcon, false) {
+			g.UpstreamIcon = g.getUpstreamIcon()
+		}
 	}
 
-	if g.options.Bool(FetchUpstreamIcon, false) {
-		g.UpstreamIcon = g.getUpstreamIcon()
-	}
-
+	wg.Wait()
 	return true
 }
 
@@ -315,16 +329,13 @@ func (g *Git) StashCount() int {
 		return 0
 	}
 
-	lines := strings.Split(stashContent, "\n")
-	g.stashCount = len(lines)
+	g.stashCount = strings.Count(stashContent, "\n") + 1 // +1: fileContent() trims
 	return g.stashCount
 }
 
 func (g *Git) Kraken() string {
 	root := g.getGitCommandOutput("rev-list", "--max-parents=0", "HEAD")
-	if strings.Contains(root, "\n") {
-		root = strings.Split(root, "\n")[0]
-	}
+	root, _, _ = strings.Cut(root, "\n")
 
 	if g.RawUpstreamURL == "" {
 		if g.Upstream == "" {
@@ -388,8 +399,20 @@ func (g *Git) isRepo(gitdir *runtime.FileInfo) bool {
 }
 
 func (g *Git) setUser() {
-	g.User.Name = g.getGitCommandOutput("config", "user.name")
-	g.User.Email = g.getGitCommandOutput("config", "user.email")
+	output := g.getGitCommandOutput("config", "--get-regexp", "^user\\.")
+	for line := range strings.SplitSeq(output, "\n") {
+		key, val, ok := strings.Cut(line, " ")
+		if !ok {
+			continue
+		}
+
+		switch key {
+		case "user.name":
+			g.User.Name = val
+		case "user.email":
+			g.User.Email = val
+		}
+	}
 }
 
 func (g *Git) isBareRepo(gitDir *runtime.FileInfo) bool {
@@ -476,7 +499,9 @@ func (g *Git) hasWorktree(gitdir *runtime.FileInfo) bool {
 		if worktreeIndex > -1 && g.env.HasFilesInDir(g.scmDir, "gitdir") {
 			gitDir := filepath.Join(g.scmDir, "gitdir")
 			realGitFolder := g.env.FileContent(gitDir)
-			g.repoRootDir = strings.TrimSuffix(realGitFolder, ".git\n")
+			g.repoRootDir = strings.TrimSuffix(strings.TrimRight(realGitFolder, "\n\r "), ".git")
+			// resolve relative paths (worktree.useRelativePaths = true)
+			g.repoRootDir = resolveGitPath(g.scmDir, g.repoRootDir)
 			g.scmDir = g.scmDir[:worktreeIndex]
 			g.mainSCMDir = g.scmDir
 			g.IsWorkTree = true
@@ -497,7 +522,9 @@ func (g *Git) hasWorktree(gitdir *runtime.FileInfo) bool {
 		gitDir := filepath.Join(g.mainSCMDir, "gitdir")
 		g.scmDir = g.mainSCMDir[:worktreeIndex]
 		gitDirContent := g.env.FileContent(gitDir)
-		g.repoRootDir = strings.TrimSuffix(gitDirContent, ".git\n")
+		g.repoRootDir = strings.TrimSuffix(strings.TrimRight(gitDirContent, "\n\r "), ".git")
+		// resolve relative paths (worktree.useRelativePaths = true)
+		g.repoRootDir = resolveGitPath(g.mainSCMDir, g.repoRootDir)
 		g.IsWorkTree = true
 		return true
 	}
@@ -556,15 +583,21 @@ func (g *Git) setPushStatus() {
 		return
 	}
 
-	ahead := g.getGitCommandOutput("rev-list", "--count", pushRemote+"..HEAD")
-	if ahead != "" {
-		g.PushAhead, _ = strconv.Atoi(strings.TrimSpace(ahead))
-	}
+	var wg sync.WaitGroup
 
-	behind := g.getGitCommandOutput("rev-list", "--count", "HEAD.."+pushRemote)
-	if behind != "" {
-		g.PushBehind, _ = strconv.Atoi(strings.TrimSpace(behind))
-	}
+	wg.Go(func() {
+		if v := g.getGitCommandOutput("rev-list", "--count", pushRemote+"..HEAD"); v != "" {
+			g.PushAhead, _ = strconv.Atoi(strings.TrimSpace(v))
+		}
+	})
+
+	wg.Go(func() {
+		if v := g.getGitCommandOutput("rev-list", "--count", "HEAD.."+pushRemote); v != "" {
+			g.PushBehind, _ = strconv.Atoi(strings.TrimSpace(v))
+		}
+	})
+
+	wg.Wait()
 }
 
 func (g *Git) getPushRemote() string {
@@ -650,7 +683,7 @@ func (g *Git) cleanUpstreamURL(url string) string {
 	}
 
 	// ssh://user@host.xz:1234/path/to/repo.git/
-	match = regex.FindNamedRegexMatch(`(ssh|ftp|git|rsync)://(.*@)?(?P<URL>[a-z0-9.-]+)(:[0-9]{4})?/(?P<PATH>.*).git`, url)
+	match = regex.FindNamedRegexMatch(`(ssh|ftp|git|rsync)://(.*@)?(?P<URL>[a-z0-9.-]+)(:[0-9]{1,5})?/(?P<PATH>.*).git`, url)
 	if len(match) == 0 {
 		// host.xz:/path/to/repo.git/
 		match = regex.FindNamedRegexMatch(`^(?P<URL>[a-z0-9.-]+):(?P<PATH>[\w.\-~/@]+)$`, url)
@@ -678,9 +711,11 @@ func (g *Git) cleanUpstreamURL(url string) string {
 }
 
 func (g *Git) getUpstreamIcon() string {
+	fallback := g.options.String(GitIcon, "\uE5FB ")
+
 	g.RawUpstreamURL = g.getRemoteURL()
 	if g.RawUpstreamURL == "" {
-		return ""
+		return fallback
 	}
 
 	g.UpstreamURL = g.cleanUpstreamURL(g.RawUpstreamURL)
@@ -705,12 +740,14 @@ func (g *Git) getUpstreamIcon() string {
 		"codecommit":       {CodeCommit, "\uF270"},
 		"codeberg":         {CodebergIcon, "\uF330"},
 	}
+
 	for key, value := range defaults {
 		if strings.Contains(g.UpstreamURL, key) {
 			return g.options.String(value.Icon, value.Default)
 		}
 	}
-	return g.options.String(GitIcon, "\uE5FB ")
+
+	return fallback
 }
 
 func (g *Git) setStatus() {
@@ -783,7 +820,7 @@ func (g *Git) setStatus() {
 
 		if strings.HasPrefix(line, BRANCHSTATUS) && len(line) > len(BRANCHSTATUS) {
 			status := line[len(BRANCHSTATUS):]
-			splitted := strings.Split(status, " ")
+			splitted := strings.SplitN(status, " ", 3)
 			if len(splitted) >= 2 {
 				g.Ahead, _ = strconv.Atoi(splitted[0])
 				behind, _ := strconv.Atoi(splitted[1])
@@ -1026,7 +1063,7 @@ func (g *Git) resolveDetachedHEAD() {
 
 	// fallback to no commits found
 	if g.ShortHash == "" {
-		g.HEAD = g.options.String(NoCommitsIcon, "\uF594 ")
+		g.HEAD = g.options.String(NoCommitsIcon, "\U000F0095 ")
 		return
 	}
 

@@ -5,19 +5,20 @@ type Pnpm struct {
 }
 
 func (n *Pnpm) Enabled() bool {
-	n.extensions = []string{"package.json", "pnpm-lock.yaml"}
-	n.commands = []*cmd{
-		{
-			executable: "pnpm",
-			args:       []string{"--version"},
-			regex:      `(?P<version>((?P<major>[0-9]+).(?P<minor>[0-9]+).(?P<patch>[0-9]+)))`,
+	n.extensions = []string{fileName, "pnpm-lock.yaml"}
+	n.tooling = map[string]*cmd{
+		pnpmToolName: {
+			executable: pnpmToolName,
+			args:       []string{versionFlagArg},
+			regex:      versionRegex,
 		},
 	}
+	n.defaultTooling = []string{pnpmToolName}
 	n.versionURLTemplate = "https://github.com/pnpm/pnpm/releases/tag/v{{ .Full }}"
 
 	return n.Language.Enabled()
 }
 
 func (n *Pnpm) Template() string {
-	return " \U000F02C1 {{.Full}} "
+	return " \ue865 {{.Full}} "
 }

@@ -2,8 +2,8 @@ import Link from "@docusaurus/Link";
 import useBaseUrl from "@docusaurus/useBaseUrl";
 import useDocusaurusContext from "@docusaurus/useDocusaurusContext";
 import Layout from "@theme/Layout";
+import Head from "@docusaurus/Head";
 import classnames from "classnames";
-import React from "react";
 import styles from "./styles.module.css";
 
 const features = [
@@ -11,8 +11,8 @@ const features = [
     title: <>🎨 Beautiful & Intelligent</>,
     description: (
       <>
-        Transform your terminal with stunning themes and intelligent segments that display 
-        Git status, cloud info, language versions, system metrics, and 180+ other contextual details. 
+        Transform your terminal with stunning themes and intelligent segments that display
+        Git status, cloud info, language versions, system metrics, and 180+ other contextual details.
         Your prompt adapts to what you're working on.
       </>
     ),
@@ -21,7 +21,7 @@ const features = [
     title: <>⚡ Lightning Fast</>,
     description: (
       <>
-        Built with Go for blazing performance. Smart caching and async operations ensure 
+        Built with Go for blazing performance. Smart caching and async operations ensure
         your prompt renders instantly, even with complex configurations and multiple segments.
         No more waiting for your terminal.
       </>
@@ -31,8 +31,8 @@ const features = [
     title: <>🌍 Universal Compatibility</>,
     description: (
       <>
-        One configuration works everywhere - PowerShell, Bash, Zsh, Fish, Nu Shell, and more. 
-        Windows, macOS, Linux, WSL, containers, SSH sessions. Write once, use everywhere 
+        One configuration works everywhere - PowerShell, Bash, Zsh, Fish, Nu Shell, and more.
+        Windows, macOS, Linux, WSL, containers, SSH sessions. Write once, use everywhere
         with zero vendor lock-in.
       </>
     ),
@@ -57,8 +57,33 @@ function Feature({ imageUrl, title, description }) {
 function Home() {
   const context = useDocusaurusContext();
   const { siteConfig = {} } = context;
+
+  const websiteJsonLd = JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    "url": "https://ohmyposh.dev/",
+    "name": "Oh My Posh",
+    "description": siteConfig.tagline,
+  });
+
+  const organizationJsonLd = JSON.stringify({
+    "@context": "https://schema.org",
+    "@type": "Organization",
+    "name": "Oh My Posh",
+    "url": "https://ohmyposh.dev/",
+    "logo": "https://ohmyposh.dev/img/logo.png",
+    "description": siteConfig.tagline,
+    "sameAs": [
+      "https://github.com/JanDeDobbeleer/oh-my-posh",
+    ],
+  });
+
   return (
     <Layout title="Home" description={`${siteConfig.tagline}`}>
+      <Head>
+        <script type="application/ld+json" dangerouslySetInnerHTML={{__html: websiteJsonLd}} />
+        <script type="application/ld+json" dangerouslySetInnerHTML={{__html: organizationJsonLd}} />
+      </Head>
       <header className={classnames("hero hero--primary", styles.heroBanner)}>
         <div className="container">
           <h1 className="hero__title">{siteConfig.title}</h1>
@@ -83,7 +108,7 @@ function Home() {
               See themes &rarr;
             </Link>
           </div>
-          <img class="hero--image" src="/img/hero.png" alt="Oh My Posh prompt"></img>
+          <img className="hero--image" src="/img/hero.png" alt="Oh My Posh prompt"></img>
         </div>
       </header>
       <main>

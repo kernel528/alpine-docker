@@ -48,6 +48,7 @@ var upgradeCmd = &cobra.Command{
 			runtime.WINDOWS,
 			runtime.DARWIN,
 			runtime.LINUX,
+			runtime.FREEBSD,
 		}
 
 		if !slices.Contains(supportedPlatforms, stdruntime.GOOS) {
@@ -71,9 +72,11 @@ var upgradeCmd = &cobra.Command{
 		}
 
 		terminal.Init(sh)
-		fmt.Print(terminal.StartProgress())
 
 		cfg := config.Get(configFlag, false)
+		cfg.TerminalFeatures.Apply()
+
+		fmt.Print(terminal.StartProgress())
 
 		defer func() {
 			fmt.Print(terminal.StopProgress())

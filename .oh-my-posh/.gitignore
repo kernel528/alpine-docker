@@ -1,11 +1,23 @@
+# APM
+apm_modules/
+.github/instructions/*
+.agents/*
+!.agents/skills
+.agents/skills/*
+!.agents/skills/segment-create/
+!.agents/skills/segment-docs/
+!.agents/skills/project-knowledge/
+
 # Others
 
+.specs/
 .fleet/
 src/test/umbraco/obj/
 src/keys
 *.prof
-*.wixpdb
-packages/msi/Microsoft.Trusted.Signing.Client
+packages/msix/Microsoft.Trusted.Signing.Client
+.claude
+.styles
 
 # Created by https://www.toptal.com/developers/gitignore/api/node,go,visualstudiocode
 # Edit at https://www.toptal.com/developers/gitignore?templates=node,go,visualstudiocode
@@ -170,6 +182,7 @@ Output/
 
 # go releaser
 /src/dist
+/src/gomodcache
 
 
 # Created by https://www.toptal.com/developers/gitignore/api/windows,linux,macos
@@ -254,3 +267,4 @@ cosign.key
 *.omp.json.bak
 
 __debug_bin
+src/src

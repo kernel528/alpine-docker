@@ -196,9 +196,8 @@ WinGet configuration enables you to install Oh My Posh and apply configuration i
 
 Create a configuration file to install and configure Oh My Posh:
 
-```yaml
-# oh-my-posh-setup.yaml
-$schema: https://raw.githubusercontent.com/PowerShell/DSC/main/schemas/2023/08/config/document.json
+```yaml title="oh-my-posh-setup.yaml"
+$schema: https://raw.githubusercontent.com/PowerShell/DSC/main/schemas/v3/config/document.json
 metadata:
   winget:
     processor: dscv3
@@ -220,9 +219,8 @@ winget configure oh-my-posh-setup.yaml
 
 This example installs Oh My Posh, adds your configuration, and initializes PowerShell:
 
-```yaml
-# oh-my-posh-complete.yaml
-$schema: https://raw.githubusercontent.com/PowerShell/DSC/main/schemas/2023/08/config/document.json
+```yaml title="oh-my-posh-complete.yaml"
+$schema: https://raw.githubusercontent.com/PowerShell/DSC/main/schemas/v3/config/document.json
 metadata:
   winget:
     processor: dscv3
@@ -246,6 +244,7 @@ resources:
       states:
         - name: pwsh
           command: oh-my-posh init pwsh --config ~/mytheme.omp.json
+          skipExistingInit: true
 ```
 
 Apply with:
@@ -258,9 +257,8 @@ winget configure oh-my-posh-complete.yaml
 
 Initialize multiple shells with different configurations:
 
-```yaml
-# oh-my-posh-multi-shell.yaml
-$schema: https://raw.githubusercontent.com/PowerShell/DSC/main/schemas/2023/08/config/document.json
+```yaml title="oh-my-posh-multi-shell.yaml"
+$schema: https://raw.githubusercontent.com/PowerShell/DSC/main/schemas/v3/config/document.json
 metadata:
   winget:
     processor: dscv3
@@ -309,8 +307,7 @@ resources that can be used in DSC configuration documents.
 
 Create a configuration document for Oh My Posh:
 
-```yaml
-# oh-my-posh-dsc.yaml
+```yaml title="oh-my-posh-dsc.yaml"
 $schema: https://aka.ms/dsc/schemas/v3/bundled/config/document.json
 resources:
   - name: Add Oh My Posh configuration
@@ -336,8 +333,7 @@ dsc config set --document oh-my-posh-dsc.yaml
 
 ### Complete configuration with multiple shells
 
-```yaml
-# oh-my-posh-complete-dsc.yaml
+```yaml title="oh-my-posh-complete-dsc.yaml"
 $schema: https://aka.ms/dsc/schemas/v3/bundled/config/document.json
 resources:
   - name: Add primary configuration
@@ -396,6 +392,13 @@ Manages shell initialization.
 
 **Properties:**
 
+- `states` (array): List of shell initialization states
+  - `name` (string): Shell name
+  - `command` (string): `oh-my-posh init` command to apply
+  - `skipExistingInit` (boolean): When `true`, any existing `oh-my-posh init` line is treated as compliant and left unchanged
+
+**Properties:**
+
 - `states` (array): List of shell configurations
   - `name` (string): Shell name (`bash`, `zsh`, `pwsh`, `fish`, etc.)
   - `command` (string): Oh My Posh initialization command
@@ -451,6 +454,7 @@ DSC shell configuration supports the following shells:
 - **nu**: Configures `~/.config/nushell/config.nu`
 - **elvish**: Configures `.elvish/rc.elv`
 - **xonsh**: Configures `.xonshrc`
+- **yash**: Configures `.yashrc`
 
 The shell integration automatically:
 
