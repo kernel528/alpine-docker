@@ -51,3 +51,4 @@
 * 3.23.2 - Updated to alpine 3.23.2 release.
 * 3.23.3 - Updated to alpine 3.23.3 release.
 * 3.24.1 - Updated to alpine 3.24.1 release.
+* 3.24.1_1 - Refreshed shell dependencies and security patches on Alpine 3.24.1.
