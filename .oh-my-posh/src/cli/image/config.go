@@ -76,13 +76,13 @@ func (color HexColor) RGB() (*RGB, error) {
 	var r, g, b int64
 	var err error
 
-	if r, err = strconv.ParseInt(hex[0:2], 16, 64); err != nil {
+	if r, err = strconv.ParseInt(hex[0:2], 16, 32); err != nil {
 		return nil, err
 	}
-	if g, err = strconv.ParseInt(hex[2:4], 16, 64); err != nil {
+	if g, err = strconv.ParseInt(hex[2:4], 16, 32); err != nil {
 		return nil, err
 	}
-	if b, err = strconv.ParseInt(hex[4:6], 16, 64); err != nil {
+	if b, err = strconv.ParseInt(hex[4:6], 16, 32); err != nil {
 		return nil, err
 	}
 
