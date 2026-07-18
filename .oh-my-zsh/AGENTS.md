@@ -2,7 +2,7 @@
 
 Project knowledge lives at:
 
-`~/Projects/Engineering/projects/shell-tools/ohmyzsh`
+`~/Projects/Agentic_Engineering/projects/shell-tools/ohmyzsh`
 
 Read before work:
 - `project-profile.md`
