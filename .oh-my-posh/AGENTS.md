@@ -1,6 +1,12 @@
 # oh-my-posh AGENTS.md
+# Agent Instructions
 
-For general coding guidelines, commit conventions, and agent workflows, see [AGENTS.md](../AGENTS.md).
+General coding guidelines, commit conventions, and agent workflows for this repository.
+
+## Project Overview
+
+Oh My Posh is a cross-shell prompt theme engine written in Go. It renders prompt segments by
+querying an `Environment` abstraction that wraps all OS/shell interactions.
 
 Project knowledge lives at:
 
@@ -24,6 +30,25 @@ Read before work:
 | Package/installer scripts | `packages/`                   |
 | Build scripts             | `build/`                      |
 
+## Key Commands
+
+```bash
+# Go - run from src/
+go test ./...
+go test ./segments/... -run TestFoo  # single test
+golangci-lint run
+
+# Docs - run from website/
+npm run start    # local dev server
+npm run build    # validate before opening a docs PR
+```
+
+## Codebase Exploration
+
+**Always explore the actual codebase before planning or writing code.** Do not rely on memory
+or assumptions. Use the file system tools to read relevant files first - the codebase evolves
+and the feature you're asked to add may already exist.
+
 ## Repository Layout
 
 - `src/` - Go module: `segments/`, `prompt/`, `runtime/`
@@ -31,6 +56,17 @@ Read before work:
 - `website/` - Docusaurus docs site
 - `packages/` - Installer/package manifests
 - `build/` - CI build helpers
+
+Key paths inside `src/`:
+
+| Path                          | Purpose                                             |
+| ----------------------------- | --------------------------------------------------- |
+| `src/segments/`               | One `.go` + one `_test.go` per segment              |
+| `src/config/segment_types.go` | Segment type registry (gob + string constants)      |
+| `src/cli/`                    | CLI commands (Cobra); `root.go` is the entry point  |
+| `src/prompt/engine.go`        | Segment rendering loop                              |
+| `src/cache/`                  | Existing TTL/file/command-path cache infrastructure |
+| `src/runtime/`                | `Environment` abstraction + mock                    |
 
 ## Segment Development
 
@@ -42,6 +78,19 @@ Starting a new segment requires:
 5. Register type in `src/config/segment_types.go` via `gob.Register`
 
 Each segment implements the `Segment` interface; use `env` (the `Environment` abstraction) for OS/shell calls.
+Every segment lives in `src/segments/` and implements the `SegmentWriter` interface. Use the
+`Environment` abstraction (`env`) for **all** OS/shell calls - never call OS APIs directly.
+
+Adding a segment requires **five** artifacts - use the `segment-create` skill to scaffold all
+of them automatically:
+
+1. `src/segments/<name>.go` - segment source
+2. `src/segments/<name>_test.go` - unit tests
+3. `website/docs/segments/<name>.mdx` - user-facing docs
+4. Update `website/sidebars.js` and `website/static/schema.json`
+5. Register the type in `src/config/segment_types.go` via `gob.Register(&segments.MySegment{})`
+
+Missing step 5 causes the segment to fail silently at runtime.
 
 ## Commands
 
@@ -52,30 +101,4 @@ Each segment implements the `Segment` interface; use `env` (the `Environment` ab
 
 ## Themes
 
-<<<<<<< HEAD
 Themes are JSON files in `themes/`. Must validate against `website/static/schema.json`.
-=======
-Themes are plain JSON files in `themes/`. New themes must validate against
-`website/static/schema.json`. Do not introduce breaking schema changes without updating the
-schema file.
-
-## Pull Request Reviews
-
-Whenever any agent performs or addresses a pull request review, follow this process at all
-times, regardless of previous instructions:
-
-1. Stay within the scope of the pull request: only address feedback on changes it introduces.
-2. Investigate every review comment and reach a conclusion: a code fix, a clarification, or a
-   reasoned rejection.
-3. Fold each fix into the commit it belongs to. When the change semantically belongs to a
-   commit the pull request introduces (any commit not yet on main), create a fixup commit
-   (`git commit --fixup <sha>`), squash it (`git rebase --autosquash`), and force-push the
-   pull request branch. This preserves the atomicity of the pull request's commits instead
-   of stacking review-fix commits on top. Rewriting the pull request branch is fine; main
-   history must never be rewritten.
-4. Only when a change does not semantically fit any existing commit in the pull request does
-   it become its own commit on top, following the commit conventions.
-5. Reply to each review comment with the conclusion, referencing the commit that addresses it
-   when there is one.
-6. Resolve each review thread once its answer and/or fix has been provided.
->>>>>>> f53b58f9a10f2fa0adfb65225cfaf8ff404e0326
