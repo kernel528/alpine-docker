@@ -73,16 +73,16 @@ func (color HexColor) RGB() (*RGB, error) {
 		return nil, fmt.Errorf("invalid hex color format: %s", hex)
 	}
 
-	var r, g, b int64
+	var r, g, b uint64
 	var err error
 
-	if r, err = strconv.ParseInt(hex[0:2], 16, 64); err != nil {
+	if r, err = strconv.ParseUint(hex[0:2], 16, 8); err != nil {
 		return nil, err
 	}
-	if g, err = strconv.ParseInt(hex[2:4], 16, 64); err != nil {
+	if g, err = strconv.ParseUint(hex[2:4], 16, 8); err != nil {
 		return nil, err
 	}
-	if b, err = strconv.ParseInt(hex[4:6], 16, 64); err != nil {
+	if b, err = strconv.ParseUint(hex[4:6], 16, 8); err != nil {
 		return nil, err
 	}
 
