@@ -28,6 +28,12 @@ Add this to your downstream Dockerfile:
 FROM kernel528/alpine:3.24.1_1
 ```
 
+## Repository Relationships and Refresh Policy
+
+This repository is the shared base for [`httpd-docker`](https://github.com/kernel528/httpd-docker), [`python-docker`](https://github.com/kernel528/python-docker), [`java-docker`](https://github.com/kernel528/java-docker), [`redis-docker`](https://github.com/kernel528/redis-docker), [`clickhouse-docker`](https://github.com/kernel528/clickhouse-docker), and [`postgres-docker`](https://github.com/kernel528/postgres-docker). The repositories remain independently versioned and released.
+
+Publish and smoke-test an immutable `kernel528/alpine` tag before updating any dependent Dockerfile. Refresh only affected dependents, in separate PRs and releases. HTTPD has an additional downstream: [`www.kernelsanders.biz`](https://github.com/kernel528/www.kernelsanders.biz), which must be rebuilt after a new HTTPD release. Swarm tags are updated last through [`docker-swarm`](https://github.com/kernel528/docker-swarm), and the coordinated state is recorded by [`docker-workspace`](https://github.com/kernel528/docker-workspace).
+
 
 ## Authors
 * **kernel528** - (kernel528@gmail.com)
