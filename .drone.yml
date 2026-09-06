@@ -26,8 +26,10 @@ steps:
       repo:
         from_secret: docker_repo_alpine
       tags:
-        - 'pr-${DRONE_PULL_REQUEST}-build-${DRONE_BUILD_NUMBER}-amd64'
-      dry_run: true
+        - '3.24'
+        - '3.24-drone-build-${DRONE_BUILD_NUMBER}-amd64'
+        - '3.24.1_1'
+        - '3.24.1_1-drone-build-${DRONE_BUILD_NUMBER}-amd64'
 
   # Slack notification
   - name: slack-notification
@@ -47,7 +49,10 @@ name: main-alpine-amd64
 
 trigger:
   event:
+    - push
     - tag
+  branch:
+    - main
 
 # Build the docker image for the main branch & tagged release
 steps:
@@ -69,6 +74,18 @@ steps:
       tags:
         - ${DRONE_TAG}
         - latest
+
+  # Test docker image
+  - name: latest-alpine-amd64-test
+    image: kernel528/alpine:latest # Construct the test image path dynamically
+    when:
+      branch:
+        - main
+      event:
+        - push
+    commands:
+      - cat /etc/alpine-release
+      - uname -a
 
   # Slack notification
   - name: slack-notification
