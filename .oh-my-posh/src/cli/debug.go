@@ -15,10 +15,9 @@ import (
 	"github.com/jandedobbeleer/oh-my-posh/src/template"
 	"github.com/jandedobbeleer/oh-my-posh/src/terminal"
 
-	"github.com/spf13/cobra"
+	"github.com/jandedobbeleer/oh-my-posh/src/cmdtree"
 )
 
-// debugCmd represents the debug command
 var (
 	debugCmd  = createDebugCmd()
 	startTime = time.Now()
@@ -28,12 +27,12 @@ func init() {
 	RootCmd.AddCommand(debugCmd)
 }
 
-func createDebugCmd() *cobra.Command {
-	debugCmd := &cobra.Command{
+func createDebugCmd() *cmdtree.Command {
+	debugCmd := &cmdtree.Command{
 		Use:   "debug",
 		Short: "Print the prompt in debug mode",
 		Long:  "Print the prompt in debug mode.",
-		Run: func(_ *cobra.Command, _ []string) {
+		Run: func(_ *cmdtree.Command, _ []string) {
 			startTime := time.Now()
 
 			log.Enable(plain)
@@ -90,6 +89,6 @@ func getDebugConfig(configpath string) *config.Config {
 		return config.Load(configpath)
 	}
 
-	reload, _ := cache.Get[bool](cache.Device, config.RELOAD)
+	reload, _ := cache.Device.Get[bool](config.RELOAD)
 	return config.Get(configpath, reload)
 }

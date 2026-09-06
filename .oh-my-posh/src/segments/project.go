@@ -9,10 +9,10 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/gookit/goutil/jsonutil"
 	"github.com/jandedobbeleer/oh-my-posh/src/log"
 	"github.com/jandedobbeleer/oh-my-posh/src/regex"
 	"github.com/jandedobbeleer/oh-my-posh/src/segments/options"
+	"github.com/jandedobbeleer/oh-my-posh/src/text"
 
 	toml "github.com/pelletier/go-toml/v2"
 	yaml "go.yaml.in/yaml/v3"
@@ -37,17 +37,14 @@ type ProjectData struct {
 	Target  string
 }
 
-// Lake file package
 type LakeFileTOML struct {
 	Name string
 }
 
-// Rust Cargo package
 type CargoTOML struct {
 	Package ProjectData
 }
 
-// Python package
 type PyProjectTOML struct {
 	Project ProjectData
 	Tool    PyProjectToolTOML
@@ -73,7 +70,51 @@ type Project struct {
 	projects []*ProjectItem
 }
 
+// Activation gates on the union of all project marker files (with per-type
+// file overrides applied), unless always_enabled pins the segment on. The
+// per-item check stays in Enabled: it must know which marker matched to pick
+// the fetcher.
+func (n *Project) Activation() Activation {
+	if n.options.Bool(options.AlwaysEnabled, false) {
+		return Activation{Always: true}
+	}
+
+	n.loadProjects()
+
+	var globs []string
+	for _, item := range n.projects {
+		globs = append(globs, item.Files...)
+	}
+
+	return Activation{FileGlobs: globs}
+}
+
 func (n *Project) Enabled() bool {
+	n.loadProjects()
+
+	if priority := n.options.StringArray(Priority, nil); len(priority) != 0 {
+		n.projects = reorderByPriority(n.projects, priority)
+	}
+
+	for _, item := range n.projects {
+		if !n.hasProjectFile(item) {
+			continue
+		}
+
+		data := item.Fetcher(*item)
+		if data == nil {
+			continue
+		}
+
+		n.ProjectData = *data
+		n.Type = item.Name
+		return true
+	}
+
+	return n.options.Bool(options.AlwaysEnabled, false)
+}
+
+func (n *Project) loadProjects() {
 	n.projects = []*ProjectItem{
 		{
 			Name:    nodeToolName,
@@ -142,30 +183,11 @@ func (n *Project) Enabled() bool {
 		},
 	}
 
-	if priority := n.options.StringArray(Priority, nil); len(priority) != 0 {
-		n.projects = reorderByPriority(n.projects, priority)
-	}
-
+	// allow files override
 	for _, item := range n.projects {
-		// allow files override
 		property := options.Option(fmt.Sprintf("%s_files", item.Name))
 		item.Files = n.options.StringArray(property, item.Files)
-
-		if !n.hasProjectFile(item) {
-			continue
-		}
-
-		data := item.Fetcher(*item)
-		if data == nil {
-			continue
-		}
-
-		n.ProjectData = *data
-		n.Type = item.Name
-		return true
 	}
-
-	return n.options.Bool(options.AlwaysEnabled, false)
 }
 
 func (n *Project) Template() string {
@@ -176,9 +198,8 @@ func (n *Project) hasProjectFile(p *ProjectItem) bool {
 	return slices.ContainsFunc(p.Files, n.env.HasFiles)
 }
 
-// reorderByPriority moves the items named in priority to the front of items, in the
-// given order. Items not named in priority keep their original relative order and are
-// appended afterward; names in priority that don't match any item are ignored.
+// Items not named in priority keep their original relative order and are appended
+// afterward; names in priority that don't match any item are ignored.
 func reorderByPriority(items []*ProjectItem, priority []string) []*ProjectItem {
 	byName := make(map[string]*ProjectItem, len(items))
 	for _, item := range items {
@@ -385,10 +406,8 @@ func (n *Project) getDotnetProject(item ProjectItem) *ProjectData {
 	}
 }
 
-// findProjectFile scans rootEntries and their subdirectories breadth-first,
-// up to maxDepth levels deep, and returns the content of the first
-// .csproj/.fsproj/.vbproj file found. Paths are kept relative to pwd so
-// FileContent resolves them the same way the caller does.
+// Scans rootEntries and their subdirectories breadth-first, up to maxDepth levels deep.
+// Paths are kept relative to pwd so FileContent resolves them the same way the caller does.
 func (n *Project) findProjectFile(rootEntries []fs.DirEntry, maxDepth int) string {
 	projectExts := []string{".csproj", ".fsproj", ".vbproj"}
 	pwd := n.env.Pwd()
@@ -460,7 +479,7 @@ func (n *Project) getPowerShellModuleData(_ ProjectItem) *ProjectData {
 		case "ModuleVersion":
 			data.Version = value
 		case "RootModule":
-			data.Name = strings.TrimRight(value, ".psm1")
+			data.Name = strings.TrimSuffix(value, filepath.Ext(value))
 		}
 	}
 
@@ -554,7 +573,7 @@ func (n *Project) firstExistingFile(files []string) string {
 func (n *Project) parseJSONPackage(file string, allowJSONC bool) (*ProjectData, error) {
 	content := n.env.FileContent(file)
 	if allowJSONC && filepath.Ext(file) == ".jsonc" {
-		content = jsonutil.StripComments(content)
+		content = text.StripJSONComments(content)
 	}
 
 	var data ProjectData

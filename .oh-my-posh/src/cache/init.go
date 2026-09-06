@@ -5,8 +5,8 @@ import (
 	"os"
 	"sync"
 	"time"
+	"uuid"
 
-	"github.com/google/uuid"
 	"github.com/jandedobbeleer/oh-my-posh/src/log"
 )
 
@@ -55,13 +55,13 @@ func SessionID() string {
 
 	once.Do(func() {
 		if newSession {
-			sessionID = uuid.NewString()
+			sessionID = newSessionID()
 			return
 		}
 
 		sessionID = os.Getenv("POSH_SESSION_ID")
 		if sessionID == "" {
-			sessionID = uuid.NewString()
+			sessionID = newSessionID()
 		}
 	})
 
@@ -71,4 +71,8 @@ func SessionID() string {
 func Close() {
 	Session.close()
 	Device.close()
+}
+
+func newSessionID() string {
+	return uuid.NewV4().String()
 }

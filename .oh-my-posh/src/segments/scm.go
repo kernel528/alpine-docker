@@ -14,13 +14,14 @@ import (
 )
 
 const (
-	// Fallback to native command
 	NativeFallback options.Option = "native_fallback"
-	// Override the built-in status formats
-	StatusFormats options.Option = "status_formats"
+	StatusFormats  options.Option = "status_formats"
+
+	// workingField is the template field name shared by every SCM status
+	// unit table below (see FieldRefs).
+	workingField = "Working"
 )
 
-// ScmStatus represents part of the status of a repository
 type ScmStatus struct {
 	Formats    map[string]string
 	Unmerged   int
@@ -99,7 +100,6 @@ type Scm struct {
 }
 
 const (
-	// BranchTemplate allows to specify a template for the branch name
 	BranchTemplate options.Option = "branch_template"
 )
 

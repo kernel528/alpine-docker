@@ -8,7 +8,6 @@ import (
 	"github.com/jandedobbeleer/oh-my-posh/src/regex"
 )
 
-// SvnStatus represents part of the status of a Svn repository
 type SvnStatus struct {
 	ScmStatus
 }
@@ -38,15 +37,26 @@ const (
 	SVNCOMMAND = "svn"
 )
 
+// svnStatusFields lists what the `svn status` scan populates (Branch and
+// BaseRev come from `svn info` unconditionally): the single probe this
+// segment derives from its templates (see FieldRefs).
+var svnStatusFields = []string{workingField}
+
 type Svn struct {
 	Working *SvnStatus
 	Branch  string
 	Scm
+	FieldRefs
 	BaseRev int
 }
 
 func (s *Svn) Template() string {
 	return " \ue0a0{{.Branch}} r{{.BaseRev}} {{.Working.String}} "
+}
+
+// Activation gates on the repository marker shouldDisplay searches for.
+func (s *Svn) Activation() Activation {
+	return Activation{ProjectFiles: []string{".svn"}}
 }
 
 func (s *Svn) Enabled() bool {
@@ -107,9 +117,9 @@ func (s *Svn) setSvnStatus() {
 	}
 
 	statusFormats := s.options.KeyValueMap(StatusFormats, map[string]string{})
-	s.Working = &SvnStatus{ScmStatus: ScmStatus{Formats: statusFormats}}
+	s.Working = &SvnStatus{Formats: statusFormats}
 
-	displayStatus := s.options.Bool(FetchStatus, false)
+	displayStatus := s.fetchUnit(svnStatusFields...)
 	if !displayStatus {
 		return
 	}

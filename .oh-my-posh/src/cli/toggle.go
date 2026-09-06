@@ -5,17 +5,16 @@ import (
 	"strings"
 
 	"github.com/jandedobbeleer/oh-my-posh/src/cache"
+	"github.com/jandedobbeleer/oh-my-posh/src/cmdtree"
 	"github.com/jandedobbeleer/oh-my-posh/src/runtime"
-	"github.com/spf13/cobra"
 )
 
-// toggleCmd represents the toggle command
-var toggleCmd = &cobra.Command{
+var toggleCmd = &cmdtree.Command{
 	Use:   "toggle segment1 segment2 ...",
 	Short: "Toggle one or more segments on/off",
 	Long:  "Toggle one or more segments on/off on the fly. Multiple segments can be specified separated by spaces.",
-	Args:  cobra.MinimumNArgs(1),
-	Run: func(cmd *cobra.Command, args []string) {
+	Args:  cmdtree.MinimumNArgs(1),
+	Run: func(cmd *cmdtree.Command, args []string) {
 		if len(args) == 0 {
 			_ = cmd.Help()
 			return
@@ -31,7 +30,7 @@ var toggleCmd = &cobra.Command{
 		}()
 
 		// Get current toggles from cache as a map
-		currentToggleSet, _ := cache.Get[map[string]bool](cache.Session, cache.TOGGLECACHE)
+		currentToggleSet, _ := cache.Session.Get[map[string]bool](cache.TOGGLECACHE)
 		if currentToggleSet == nil {
 			currentToggleSet = make(map[string]bool)
 		}
@@ -49,7 +48,7 @@ var toggleCmd = &cobra.Command{
 		}
 
 		// Store the map directly in cache
-		cache.Set(cache.Session, cache.TOGGLECACHE, currentToggleSet, cache.INFINITE)
+		cache.Session.Set(cache.TOGGLECACHE, currentToggleSet, cache.INFINITE)
 	},
 }
 
