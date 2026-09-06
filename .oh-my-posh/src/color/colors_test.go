@@ -46,8 +46,8 @@ func TestGetAnsiFromColorString(t *testing.T) {
 func TestMakeColors(t *testing.T) {
 	env := &mock.Environment{}
 
-	cache.Set(cache.Device, accentColor, &Set{}, cache.INFINITE)
-	defer cache.DeleteAll(cache.Device)
+	cache.Device.Set(accentColor, &Set{}, cache.INFINITE)
+	defer cache.Device.DeleteAll()
 
 	env.On("WindowsRegistryKeyValue", `HKEY_CURRENT_USER\Software\Microsoft\Windows\DWM\ColorizationColor`).Return(&runtime.WindowsRegistryValue{}, errors.New("err"))
 	colors := MakeColors(nil, false, "", env)
@@ -67,9 +67,8 @@ func TestMakeColors(t *testing.T) {
 	assert.IsType(t, &Defaults{}, colors.(*Cached).ansiColors.(*PaletteColors).ansiColors)
 }
 
-// TestGradientPassesThroughAnsiColorDecorators verifies a gradient string is never mangled
-// by hex/256 parsing or palette resolution; it must round-trip untouched through every
-// String decorator so the terminal writer can render it per cell.
+// A gradient string must round-trip untouched through every String decorator, never mangled
+// by hex/256 parsing or palette resolution, so the terminal writer can render it per cell.
 func TestGradientPassesThroughAnsiColorDecorators(t *testing.T) {
 	gradient := Ansi("linear-gradient(#FF0000, #0000FF)")
 

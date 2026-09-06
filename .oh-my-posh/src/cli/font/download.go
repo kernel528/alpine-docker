@@ -12,12 +12,14 @@ import (
 	"path/filepath"
 
 	"github.com/jandedobbeleer/oh-my-posh/src/cache"
-	"github.com/jandedobbeleer/oh-my-posh/src/cli/progress"
+	"github.com/jandedobbeleer/oh-my-posh/src/cli/ui"
 	"github.com/jandedobbeleer/oh-my-posh/src/runtime/http"
 )
 
-func Download(fontURL string) ([]byte, error) {
-	if zipPath, OK := cache.Get[string](cache.Device, fontURL); OK {
+// download fetches a font zip, reporting how much has arrived so a caller can draw a bar. report
+// may be nil, which is what the DSC path and the tests pass.
+func download(fontURL string, report func(fraction float64)) ([]byte, error) {
+	if zipPath, OK := cache.Device.Get[string](fontURL); OK {
 		if b, err := os.ReadFile(zipPath); err == nil {
 			return b, nil
 		}
@@ -30,7 +32,7 @@ func Download(fontURL string) ([]byte, error) {
 	}
 
 	var b []byte
-	if b, err = getRemoteFile(fontURL); err != nil {
+	if b, err = getRemoteFile(fontURL, report); err != nil {
 		return nil, err
 	}
 
@@ -55,7 +57,7 @@ func Download(fontURL string) ([]byte, error) {
 		return b, nil
 	}
 
-	cache.Set(cache.Device, fontURL, zipPath, cache.ONEDAY)
+	cache.Device.Set(fontURL, zipPath, cache.ONEDAY)
 
 	return b, nil
 }
@@ -65,7 +67,7 @@ func isZipFile(data []byte) bool {
 	return contentType == "application/zip"
 }
 
-func getRemoteFile(location string) (data []byte, err error) {
+func getRemoteFile(location string, report func(fraction float64)) (data []byte, err error) {
 	req, err := httplib.NewRequestWithContext(context.Background(), "GET", location, nil)
 	if err != nil {
 		return nil, err
@@ -82,7 +84,7 @@ func getRemoteFile(location string) (data []byte, err error) {
 		return data, fmt.Errorf("failed to download zip file: %s\n→ %s", resp.Status, location)
 	}
 
-	reader := progress.NewReader(resp.Body, resp.ContentLength, program)
+	reader := ui.NewReader(resp.Body, resp.ContentLength, report)
 
 	data, err = io.ReadAll(reader)
 	if err != nil {
@@ -90,4 +92,10 @@ func getRemoteFile(location string) (data []byte, err error) {
 	}
 
 	return
+}
+
+// Download keeps the old name for callers that need no progress reporting (see font.Apply, which
+// runs under DSC with nothing drawing).
+func Download(fontURL string) ([]byte, error) {
+	return download(fontURL, nil)
 }

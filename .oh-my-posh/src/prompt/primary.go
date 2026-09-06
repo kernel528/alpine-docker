@@ -7,6 +7,7 @@ import (
 	"github.com/jandedobbeleer/oh-my-posh/src/cache"
 	"github.com/jandedobbeleer/oh-my-posh/src/config"
 	"github.com/jandedobbeleer/oh-my-posh/src/shell"
+	"github.com/jandedobbeleer/oh-my-posh/src/template"
 	"github.com/jandedobbeleer/oh-my-posh/src/terminal"
 )
 
@@ -14,11 +15,13 @@ func (e *Engine) Primary() string {
 	return e.primaryInternal(false)
 }
 
-// primaryInternal handles both regular and streaming prompt rendering
 func (e *Engine) primaryInternal(fromCache bool) string {
+	e.startRunCapture()
+
 	needsPrimaryRightPrompt := e.needsPrimaryRightPrompt()
 
 	e.writePrimaryPromptInternal(needsPrimaryRightPrompt, fromCache)
+	e.markCursorAnchor()
 
 	switch e.Env.Shell() {
 	case shell.ZSH:
@@ -52,7 +55,6 @@ func (e *Engine) writePrimaryPrompt(needsPrimaryRPrompt bool) {
 	e.writePrimaryPromptInternal(needsPrimaryRPrompt, false)
 }
 
-// writePrimaryPromptInternal handles both regular and streaming prompt rendering
 func (e *Engine) writePrimaryPromptInternal(needsPrimaryRPrompt, fromCache bool) {
 	if e.Config.ShellIntegration {
 		exitCode, _ := e.Env.StatusCodes()
@@ -135,8 +137,8 @@ func (e *Engine) writePrimaryPromptInternal(needsPrimaryRPrompt, fromCache bool)
 	// Only handle tooltip caching in regular (non-cached) rendering, once per
 	// prompt rather than once per block.
 	if !fromCache && !e.Config.ToolTipsAction.IsDefault() {
-		cache.Set(cache.Session, RPromptKey, e.rprompt, cache.INFINITE)
-		cache.Set(cache.Session, RPromptLengthKey, e.rpromptLength, cache.INFINITE)
+		cache.Session.Set(RPromptKey, e.rprompt, cache.INFINITE)
+		cache.Session.Set(RPromptLengthKey, e.rpromptLength, cache.INFINITE)
 	}
 
 	if len(e.Config.ConsoleTitleTemplate) > 0 && !e.Env.Flags().Plain {
@@ -147,11 +149,25 @@ func (e *Engine) writePrimaryPromptInternal(needsPrimaryRPrompt, fromCache bool)
 	if e.Config.FinalSpace {
 		e.write(" ")
 		e.currentLineLength++
+		// e.write goes straight into the engine's own builder, so this space never passes
+		// through terminal.Write and the Run stream cannot see it - the same reason right-block
+		// padding needs gapRun. Without this an SVG export drew the cursor flush against the
+		// last segment while a real terminal left a space there, and markCursorAnchor (called
+		// once this function returns) placed the anchor one cell short.
+		e.appendCapturedRuns(gapRun(1), nil)
 	}
 
 	if e.Config.ITermFeatures != nil && e.isIterm() {
 		host, _ := e.Env.Host()
 		e.write(terminal.RenderItermFeatures(e.Config.ITermFeatures, e.Env.Shell(), e.Env.Pwd(), e.Env.User(), host))
+	}
+
+	// Template-rendered so cursor_style can vary per render, e.g. by keying off
+	// POSH_VI_MODE (set by the vimode segment's shell hooks) via .Env.
+	if len(e.Config.CursorStyle) > 0 {
+		if style, err := template.RenderTrusted(e.Config.CursorStyle, nil); err == nil {
+			e.write(terminal.SetCursorStyle(style))
+		}
 	}
 
 	if e.Config.ShellIntegration {
@@ -184,4 +200,5 @@ func (e *Engine) writePrimaryRightPrompt() {
 	e.write(strings.Repeat(" ", space))
 	e.write(e.rprompt)
 	e.write(terminal.RestoreCursorPosition())
+	e.appendCapturedRuns(gapRun(space), e.rpromptRuns)
 }

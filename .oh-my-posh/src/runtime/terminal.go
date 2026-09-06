@@ -7,7 +7,6 @@ import (
 	"io"
 	"io/fs"
 	httplib "net/http"
-	"net/http/httputil"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -23,19 +22,26 @@ import (
 	"github.com/jandedobbeleer/oh-my-posh/src/runtime/cmd"
 	"github.com/jandedobbeleer/oh-my-posh/src/runtime/http"
 	"github.com/jandedobbeleer/oh-my-posh/src/runtime/path"
-
-	disk "github.com/shirou/gopsutil/v4/disk"
-	load "github.com/shirou/gopsutil/v4/load"
-	process "github.com/shirou/gopsutil/v4/process"
 )
 
 type Terminal struct {
-	CmdFlags *Flags
-	cmdCache *cache.Command
-	lsDirMap *maps.Concurrent[[]fs.DirEntry]
-	cwd      string
-	host     string
-	networks []*Connection
+	CmdFlags      *Flags
+	cmdCache      *cache.Command
+	lsDirMap      *maps.Concurrent[[]fs.DirEntry]
+	dirIndexMap   *maps.Concurrent[*dirIndex]
+	parentFileMap *maps.Concurrent[parentFilePathResult]
+	cwd           string
+	host          string
+	networks      []*Connection
+}
+
+// parentFilePathResult memoizes a HasParentFilePath outcome (hit or miss) for
+// the duration of one prompt invocation, so the activation gate and a
+// segment's own Enabled() doing the same upward search only walk the
+// directory tree once.
+type parentFilePathResult struct {
+	info *FileInfo
+	err  error
 }
 
 func (term *Terminal) Init(flags *Flags) {
@@ -48,6 +54,8 @@ func (term *Terminal) Init(flags *Flags) {
 	}
 
 	term.lsDirMap = maps.NewConcurrent[[]fs.DirEntry]()
+	term.dirIndexMap = maps.NewConcurrent[*dirIndex]()
+	term.parentFileMap = maps.NewConcurrent[parentFilePathResult]()
 
 	term.setPromptCount()
 
@@ -60,6 +68,17 @@ func (term *Terminal) Init(flags *Flags) {
 
 func (term *Terminal) Getenv(key string) string {
 	defer log.Trace(time.Now(), key)
+
+	// The data file's env section carries template values (UserName, PWD, ...),
+	// not OS variables, so there is nothing to substitute here - and a browser
+	// has no environment either. Answering empty is what makes the CLI under
+	// DataOnly and the wasm build agree; reading the real environment would
+	// leave a segment keyed on, say, TERM_PROGRAM rendering one thing here and
+	// another there, from the same config and the same data.
+	if term.CmdFlags != nil && term.CmdFlags.DataOnly {
+		return ""
+	}
+
 	val := os.Getenv(key)
 	log.Debug(val)
 	return val
@@ -102,34 +121,198 @@ func (term *Terminal) setPwd() {
 	log.Debug(term.cwd)
 }
 
+// errDataOnly is what every environment probe answers with when
+// Flags.DataOnly is set. DataOnly started life in config.Segment.restoreData,
+// suppressing a segment the recorded data does not cover - but that only
+// governs the segment's own Enabled(). A writer field computed lazily by a
+// method the template calls still reached the machine long afterwards:
+// segments/git.go's StashCount() reads logs/refs/stash off disk, and
+// stashCount is unexported so no recorded data ever restores it. Rendering
+// jandedobbeleer under wasm, where there is no filesystem, failed that
+// template outright while the CLI happily read the real repository.
+//
+// Gating the environment itself rather than each such method is what makes
+// the guarantee hold for segments nobody has audited: there is no way to
+// write one that probes, because the probe primitives themselves refuse.
+var errDataOnly = errors.New("environment access is disabled: rendering from recorded data only")
+
 func (term *Terminal) HasFiles(pattern string) bool {
 	return term.HasFilesInDir(term.Pwd(), pattern)
 }
 
 func (term *Terminal) HasFilesInDir(dir, pattern string) bool {
+	if term.CmdFlags != nil && term.CmdFlags.DataOnly {
+		return false
+	}
 	defer log.Trace(time.Now(), pattern)
 
-	fileSystem := os.DirFS(dir)
-	var dirEntries []fs.DirEntry
-
-	if files, OK := term.lsDirMap.Get(dir); OK {
-		dirEntries = files
-	}
-
-	if len(dirEntries) == 0 {
-		var err error
-		dirEntries, err = fs.ReadDir(fileSystem, ".")
-		if err != nil {
-			log.Error(err)
-			log.Debug("false")
-			return false
-		}
-
-		term.lsDirMap.Set(dir, dirEntries)
+	dirEntries, err := term.readDir(dir)
+	if err != nil {
+		log.Error(err)
+		log.Debug("false")
+		return false
 	}
 
 	pattern = strings.ToLower(pattern)
 
+	idx := term.dirIndex(dir, dirEntries)
+	if matched, ok := idx.match(pattern); ok {
+		if matched {
+			log.Debug("true")
+			return true
+		}
+
+		log.Debug("false")
+		return false
+	}
+
+	return linearMatch(dirEntries, pattern)
+}
+
+// readDir returns dir's listing, populating the per-Terminal cache from disk
+// on first use. A directory read once during a prompt invocation never
+// changes underneath it, so later calls for the same dir reuse the cached
+// entries instead of hitting the filesystem again.
+func (term *Terminal) readDir(dir string) ([]fs.DirEntry, error) {
+	if files, OK := term.lsDirMap.Get(dir); OK && len(files) > 0 {
+		return files, nil
+	}
+
+	fileSystem := os.DirFS(dir)
+
+	dirEntries, err := fs.ReadDir(fileSystem, ".")
+	if err != nil {
+		return nil, err
+	}
+
+	term.lsDirMap.Set(dir, dirEntries)
+
+	return dirEntries, nil
+}
+
+// dirIndex returns the cached dirIndex for dir, building it from dirEntries
+// on first use. Two callers racing on the same never-before-seen dir may
+// both build it; the maps.Concurrent Set that loses the race is discarded,
+// which is harmless since both builds produce an equal index - the same
+// tradeoff lsDirMap already makes for the raw listing.
+func (term *Terminal) dirIndex(dir string, dirEntries []fs.DirEntry) *dirIndex {
+	if idx, OK := term.dirIndexMap.Get(dir); OK {
+		return idx
+	}
+
+	idx := newDirIndex(dirEntries)
+
+	// readDir deliberately never caches an empty listing - an empty directory
+	// is re-read on every probe - so an index built from one must not be
+	// cached either: a file appearing mid-render would show up in the fresh
+	// listing (and in linearMatch fallbacks) while a cached empty index kept
+	// answering false for the fast-path shapes.
+	if len(dirEntries) > 0 {
+		term.dirIndexMap.Set(dir, idx)
+	}
+
+	return idx
+}
+
+// dirIndex is the inverted view of a directory listing that HasFilesInDir
+// consults before falling back to a linear filepath.Match scan. Building it
+// once per directory turns the common query shapes - a literal file name, or
+// a "*.ext" glob - into a single map lookup instead of a scan repeated for
+// every segment and every glob it declares.
+//
+// It excludes directories and lower-cases every name, mirroring linearMatch's
+// own comparison exactly.
+type dirIndex struct {
+	// names holds every file's lower-cased name, answering literal (no
+	// metacharacter) patterns.
+	names map[string]struct{}
+	// suffixes holds every dotted suffix of every file's lower-cased name -
+	// for "a.b.c" that is ".c" and ".b.c" - so both "*.c" and multi-dot
+	// patterns like "*.gradle.kts" resolve with a single lookup.
+	suffixes map[string]struct{}
+}
+
+// newDirIndex builds a dirIndex from a directory listing.
+func newDirIndex(dirEntries []fs.DirEntry) *dirIndex {
+	idx := &dirIndex{
+		names:    make(map[string]struct{}, len(dirEntries)),
+		suffixes: make(map[string]struct{}),
+	}
+
+	for _, entry := range dirEntries {
+		if entry.IsDir() {
+			continue
+		}
+
+		name := strings.ToLower(entry.Name())
+		idx.names[name] = struct{}{}
+
+		for i, r := range name {
+			if r != '.' {
+				continue
+			}
+
+			idx.suffixes[name[i:]] = struct{}{}
+		}
+	}
+
+	return idx
+}
+
+// match answers pattern - already lower-cased by the caller, the same
+// contract linearMatch relies on - from the index when its shape allows a
+// direct lookup. ok is false for anything else, telling the caller to fall
+// back to linearMatch; that fallback is always correct, so a false negative
+// here only costs performance, never correctness.
+func (idx *dirIndex) match(pattern string) (matched, ok bool) {
+	if suffix, isSuffix := suffixPattern(pattern); isSuffix {
+		_, hit := idx.suffixes[suffix]
+		return hit, true
+	}
+
+	if !hasGlobMeta(pattern) {
+		_, hit := idx.names[pattern]
+		return hit, true
+	}
+
+	return false, false
+}
+
+// hasGlobMeta reports whether pattern contains a filepath.Match
+// metacharacter - wildcard, single-character wildcard, character class, or
+// escape. A pattern with none of these is a plain literal: filepath.Match
+// degrades to a straight string comparison against the (single-element,
+// separator-free) directory entry name.
+func hasGlobMeta(pattern string) bool {
+	return strings.ContainsAny(pattern, `*?[\`)
+}
+
+// suffixPattern reports whether pattern has the shape "*" followed by a
+// dotted suffix with no further metacharacters - "*.go", "*.gradle.kts" -
+// and if so returns that suffix, dot included, ready for a
+// dirIndex.suffixes lookup.
+//
+// Patterns the index cannot decide this way - bare "*", or a leading "*"
+// whose suffix does not start with "." such as "*txt" - fall through to
+// linearMatch instead of being special-cased here: they are rare in
+// practice, and the index only ever tracks dot-anchored suffixes.
+func suffixPattern(pattern string) (suffix string, ok bool) {
+	if len(pattern) < 2 || pattern[0] != '*' || pattern[1] != '.' {
+		return "", false
+	}
+
+	if hasGlobMeta(pattern[1:]) {
+		return "", false
+	}
+
+	return pattern[1:], true
+}
+
+// linearMatch is the pre-index HasFilesInDir scan: filepath.Match against
+// every non-directory entry, case-insensitively. It is the fallback for
+// pattern shapes dirIndex.match cannot decide, and the reference
+// implementation the differential tests check the index against.
+func linearMatch(dirEntries []fs.DirEntry, pattern string) bool {
 	for _, match := range dirEntries {
 		if match.IsDir() {
 			continue
@@ -153,6 +336,9 @@ func (term *Terminal) HasFilesInDir(dir, pattern string) bool {
 }
 
 func (term *Terminal) HasFileInParentDirs(pattern string, depth uint) bool {
+	if term.CmdFlags != nil && term.CmdFlags.DataOnly {
+		return false
+	}
 	defer log.Trace(time.Now(), pattern, fmt.Sprint(depth))
 	currentFolder := term.Pwd()
 
@@ -174,6 +360,9 @@ func (term *Terminal) HasFileInParentDirs(pattern string, depth uint) bool {
 }
 
 func (term *Terminal) HasFolder(folder string) bool {
+	if term.CmdFlags != nil && term.CmdFlags.DataOnly {
+		return false
+	}
 	defer log.Trace(time.Now(), folder)
 	f, err := os.Stat(folder)
 	if err != nil {
@@ -185,7 +374,31 @@ func (term *Terminal) HasFolder(folder string) bool {
 	return isDir
 }
 
+// StatFile reports the modification time and size of the file at filePath.
+// It works the same way on every platform (a plain os.Stat), so a cache key
+// built from it invalidates correctly on Windows and darwin too, not just
+// unix.
+func (term *Terminal) StatFile(filePath string) (FileStat, error) {
+	if term.CmdFlags != nil && term.CmdFlags.DataOnly {
+		return FileStat{}, errDataOnly
+	}
+	defer log.Trace(time.Now(), filePath)
+
+	info, err := os.Stat(filePath)
+	if err != nil {
+		log.Error(err)
+		return FileStat{}, err
+	}
+
+	stat := FileStat{ModTime: info.ModTime().Unix(), Size: info.Size()}
+	log.Debugf("%+v", stat)
+	return stat, nil
+}
+
 func (term *Terminal) ResolveSymlink(input string) (string, error) {
+	if term.CmdFlags != nil && term.CmdFlags.DataOnly {
+		return "", errDataOnly
+	}
 	defer log.Trace(time.Now(), input)
 	link, err := filepath.EvalSymlinks(input)
 	if err != nil {
@@ -197,6 +410,9 @@ func (term *Terminal) ResolveSymlink(input string) (string, error) {
 }
 
 func (term *Terminal) FileContent(file string) string {
+	if term.CmdFlags != nil && term.CmdFlags.DataOnly {
+		return ""
+	}
 	defer log.Trace(time.Now(), file)
 	if !filepath.IsAbs(file) {
 		file = filepath.Join(term.Pwd(), file)
@@ -215,6 +431,9 @@ func (term *Terminal) FileContent(file string) string {
 }
 
 func (term *Terminal) LsDir(input string) []fs.DirEntry {
+	if term.CmdFlags != nil && term.CmdFlags.DataOnly {
+		return nil
+	}
 	defer log.Trace(time.Now(), input)
 
 	entries, err := os.ReadDir(input)
@@ -270,6 +489,9 @@ func (term *Terminal) RunCommand(command string, args ...string) (string, error)
 }
 
 func (term *Terminal) RunCommandWithEnv(command string, envs []string, args ...string) (string, error) {
+	if term.CmdFlags != nil && term.CmdFlags.DataOnly {
+		return "", errDataOnly
+	}
 	defer log.Trace(time.Now(), append([]string{command}, args...)...)
 
 	if cacheCommand, ok := term.cmdCache.Get(command); ok {
@@ -286,6 +508,9 @@ func (term *Terminal) RunCommandWithEnv(command string, envs []string, args ...s
 }
 
 func (term *Terminal) RunShellCommand(shell, command string) string {
+	if term.CmdFlags != nil && term.CmdFlags.DataOnly {
+		return ""
+	}
 	defer log.Trace(time.Now())
 
 	if out, err := term.RunCommand(shell, "-c", command); err == nil {
@@ -296,6 +521,9 @@ func (term *Terminal) RunShellCommand(shell, command string) string {
 }
 
 func (term *Terminal) CommandPath(command string) string {
+	if term.CmdFlags != nil && term.CmdFlags.DataOnly {
+		return ""
+	}
 	defer log.Trace(time.Now(), command)
 
 	// L1: in-memory, unbounded for the lifetime of this process.
@@ -340,6 +568,9 @@ func (term *Terminal) CommandPath(command string) string {
 }
 
 func (term *Terminal) HasCommand(command string) bool {
+	if term.CmdFlags != nil && term.CmdFlags.DataOnly {
+		return false
+	}
 	defer log.Trace(time.Now(), command)
 
 	if cmdPath := term.CommandPath(command); cmdPath != "" {
@@ -384,12 +615,8 @@ func (term *Terminal) Shell() string {
 
 	log.Debug("no shell name provided in flags, trying to detect it")
 
-	pid := os.Getppid()
-	p, _ := process.NewProcess(int32(pid))
-
-	name, err := p.Name()
-	if err != nil {
-		log.Error(err)
+	name := term.shellProcessName()
+	if len(name) == 0 {
 		return UNKNOWN
 	}
 
@@ -414,6 +641,9 @@ func (term *Terminal) unWrapError(err error) error {
 }
 
 func (term *Terminal) HTTPRequest(targetURL string, body io.Reader, timeout int, requestModifiers ...http.RequestModifier) ([]byte, error) {
+	if term.CmdFlags != nil && term.CmdFlags.DataOnly {
+		return nil, errDataOnly
+	}
 	defer log.Trace(time.Now(), targetURL)
 
 	ctx, cncl := context.WithTimeout(context.Background(), time.Millisecond*time.Duration(timeout))
@@ -429,8 +659,7 @@ func (term *Terminal) HTTPRequest(targetURL string, body io.Reader, timeout int,
 	}
 
 	if term.CmdFlags.Debug {
-		dump, _ := httputil.DumpRequestOut(request, true)
-		log.Debug(string(dump))
+		log.Debug(dumpRequest(request))
 	}
 
 	response, err := http.HTTPClient.Do(request)
@@ -462,8 +691,28 @@ func (term *Terminal) HTTPRequest(targetURL string, body io.Reader, timeout int,
 }
 
 func (term *Terminal) HasParentFilePath(parent string, followSymlinks bool) (*FileInfo, error) {
+	if term.CmdFlags != nil && term.CmdFlags.DataOnly {
+		return nil, errDataOnly
+	}
 	defer log.Trace(time.Now(), parent)
 
+	key := parent + "|" + strconv.FormatBool(followSymlinks)
+	if term.parentFileMap != nil {
+		if result, OK := term.parentFileMap.Get(key); OK {
+			return result.info, result.err
+		}
+	}
+
+	info, err := term.findParentFilePath(parent, followSymlinks)
+
+	if term.parentFileMap != nil {
+		term.parentFileMap.Set(key, parentFilePathResult{info: info, err: err})
+	}
+
+	return info, err
+}
+
+func (term *Terminal) findParentFilePath(parent string, followSymlinks bool) (*FileInfo, error) {
 	pwd := term.Pwd()
 	if followSymlinks {
 		if actual, err := term.ResolveSymlink(pwd); err == nil {
@@ -558,14 +807,14 @@ func (term *Terminal) setPromptCount() {
 	defer log.Trace(time.Now())
 
 	var count int
-	if val, found := cache.Get[int](cache.Session, cache.PROMPTCOUNTCACHE); found {
+	if val, found := cache.Session.Get[int](cache.PROMPTCOUNTCACHE); found {
 		count = val
 	}
 
 	// Only update the count if we're generating a primary prompt.
 	if term.CmdFlags.Type == PRIMARY {
 		count++
-		cache.Set(cache.Session, cache.PROMPTCOUNTCACHE, count, cache.ONEDAY)
+		cache.Session.Set(cache.PROMPTCOUNTCACHE, count, cache.ONEDAY)
 	}
 
 	term.CmdFlags.PromptCount = count
@@ -581,29 +830,6 @@ func (term *Terminal) CursorPosition() (row, col int) {
 	}
 
 	return
-}
-
-func (term *Terminal) SystemInfo() (*SystemInfo, error) {
-	s := &SystemInfo{}
-
-	mem, err := term.Memory()
-	if err != nil {
-		return nil, err
-	}
-	s.Memory = *mem
-
-	loadStat, err := load.Avg()
-	if err == nil {
-		s.Load1 = loadStat.Load1
-		s.Load5 = loadStat.Load5
-		s.Load15 = loadStat.Load15
-	}
-
-	diskIO, err := disk.IOCounters()
-	if err == nil {
-		s.Disks = diskIO
-	}
-	return s, nil
 }
 
 func cleanHostName(hostName string) string {

@@ -1,14 +1,18 @@
 package config
 
 import (
+	"fmt"
+	"path/filepath"
 	"testing"
 
 	"github.com/jandedobbeleer/oh-my-posh/src/cache"
 	"github.com/jandedobbeleer/oh-my-posh/src/maps"
+	"github.com/jandedobbeleer/oh-my-posh/src/runtime"
 	"github.com/jandedobbeleer/oh-my-posh/src/runtime/mock"
 	"github.com/jandedobbeleer/oh-my-posh/src/segments"
 	"github.com/jandedobbeleer/oh-my-posh/src/template"
 	"github.com/stretchr/testify/assert"
+	testifymock "github.com/stretchr/testify/mock"
 )
 
 func newCachedTextSegment(env *mock.Environment, alias string, strategy Strategy) *Segment {
@@ -38,7 +42,7 @@ func TestSegmentCache(t *testing.T) {
 
 	defer func() {
 		template.Cache = previousTemplateCache
-		cache.DeleteAll(cache.Device)
+		cache.Device.DeleteAll()
 	}()
 
 	env := new(mock.Environment)
@@ -82,11 +86,11 @@ func TestSegmentCache(t *testing.T) {
 		segment := newCachedTextSegment(env, "legacy_segment", Device)
 
 		key, store := segment.cacheKeyAndStore()
-		cache.Set(store, key, "legacy_json_string", cache.Duration("10m"))
+		store.Set(key, "legacy_json_string", cache.Duration("10m"))
 
 		assert.False(t, segment.restoreCache(), "legacy cache should not be restored")
 
-		_, found := cache.Get[string](store, key)
+		_, found := store.Get[string](key)
 		assert.False(t, found, "legacy key should be removed")
 	})
 
@@ -94,11 +98,78 @@ func TestSegmentCache(t *testing.T) {
 		segment := newCachedTextSegment(env, "unexpected_segment", Device)
 
 		key, store := segment.cacheKeyAndStore()
-		cache.Set(store, key, 42, cache.Duration("10m"))
+		store.Set(key, 42, cache.Duration("10m"))
 
 		assert.False(t, segment.restoreCache(), "unexpected cache type should not be restored")
 
-		_, found := cache.Get[int](store, key)
+		_, found := store.Get[int](key)
 		assert.False(t, found, "unexpected key should be removed")
 	})
+}
+
+func TestGitMainWorktreeRestoresLiveContextLazilyAfterSegmentCacheHit(t *testing.T) {
+	const (
+		alias          = "cached-linked-worktree"
+		mainWorktree   = "/repo/main"
+		linkedWorktree = "/repo/linked"
+		commonDir      = mainWorktree + "/.git"
+		adminDir       = commonDir + "/worktrees/linked"
+	)
+
+	// the snapshot source mirrors the executing segment's config exactly:
+	// an unanalyzable segment's cache key fingerprints its raw template
+	// sources, so a differing template would (correctly) miss the cache
+	segmentCache := &Cache{Duration: "5h", Strategy: Session}
+	source := &Segment{
+		Type:     GIT,
+		Alias:    alias,
+		Cache:    segmentCache,
+		Template: "{{ .MainWorktree }}|{{ .MainWorktree }}",
+		writer: &segments.Git{
+			IsWorkTree: true,
+		},
+	}
+	source.setCache()
+
+	key, store := source.cacheKeyAndStore()
+	t.Cleanup(func() { store.Delete(key) })
+
+	env := newDataReplayEnv(&runtime.Flags{})
+	gitFile := &runtime.FileInfo{
+		Path:         linkedWorktree + "/.git",
+		ParentFolder: linkedWorktree,
+	}
+	env.On("HasParentFilePath", ".git", true).Return(gitFile, nil).Once()
+	env.On("InWSLSharedDrive").Return(false).Once()
+	env.On("GOOS").Return("")
+	env.On("HasCommand", "git").Return(true).Once()
+	env.On("FileContent", gitFile.Path).Return("gitdir: " + adminDir).Once()
+	env.On("FileContent", filepath.Join(adminDir, "gitdir")).Return(linkedWorktree + "/.git").Once()
+	env.On("RunCommand", "git", []string{
+		"-C", linkedWorktree + "/",
+		"--no-optional-locks",
+		"-c", "core.quotepath=false",
+		"-c", "color.status=false",
+		"worktree", "list", "--porcelain", "-z",
+	}).Return("worktree "+mainWorktree+"\x00HEAD 1234567890abcdef\x00branch refs/heads/main\x00\x00", nil).Once()
+
+	segment := &Segment{
+		Type:     GIT,
+		Alias:    alias,
+		Cache:    segmentCache,
+		Template: "{{ .MainWorktree }}|{{ .MainWorktree }}",
+	}
+	segment.Execute(env)
+
+	env.AssertNotCalled(t, "HasParentFilePath", testifymock.Anything, testifymock.Anything)
+	env.AssertNotCalled(t, "HasCommand", testifymock.Anything)
+	env.AssertNotCalled(t, "RunCommand", testifymock.Anything, testifymock.Anything)
+
+	writer := segment.Writer().(*segments.Git)
+	assert.Equal(t, mainWorktree, writer.MainWorktree())
+	assert.Equal(t, mainWorktree, writer.MainWorktree())
+	assert.Equal(t, fmt.Sprintf("%s|%s", mainWorktree, mainWorktree), segment.string())
+	env.AssertNumberOfCalls(t, "HasParentFilePath", 1)
+	env.AssertNumberOfCalls(t, "HasCommand", 1)
+	env.AssertNumberOfCalls(t, "RunCommand", 1)
 }

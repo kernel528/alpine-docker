@@ -11,7 +11,6 @@ import (
 	"github.com/jandedobbeleer/oh-my-posh/src/text"
 )
 
-// CopilotUsage represents usage statistics for a specific quota type.
 type CopilotUsage struct {
 	Used      int             `json:"used"`
 	Limit     int             `json:"limit"`
@@ -20,7 +19,6 @@ type CopilotUsage struct {
 	Unlimited bool            `json:"unlimited"`
 }
 
-// Copilot displays GitHub Copilot usage statistics.
 type Copilot struct {
 	Base
 	BillingCycleEnd string       `json:"billing_cycle_end"`
@@ -33,21 +31,18 @@ const (
 	copilotAPIURL = "https://api.github.com/copilot_internal/user"
 )
 
-// copilotQuotaSnapshot represents a single quota type.
 type copilotQuotaSnapshot struct {
 	Entitlement int  `json:"entitlement"`
 	Remaining   int  `json:"remaining"`
 	Unlimited   bool `json:"unlimited"`
 }
 
-// copilotQuotaSnapshots represents the quota snapshots structure.
 type copilotQuotaSnapshots struct {
 	PremiumInteractions copilotQuotaSnapshot `json:"premium_interactions"`
 	Completions         copilotQuotaSnapshot `json:"completions"`
 	Chat                copilotQuotaSnapshot `json:"chat"`
 }
 
-// copilotAPIResponse represents the API response structure.
 type copilotAPIResponse struct {
 	QuotaSnapshots    *copilotQuotaSnapshots `json:"quota_snapshots"`
 	QuotaResetDate    string                 `json:"quota_reset_date"`
@@ -70,7 +65,7 @@ func (c *Copilot) Enabled() bool {
 
 func (c *Copilot) getAccessToken() string {
 	// Check cache from `oh-my-posh auth copilot`
-	if cachedToken, OK := cache.Get[string](cache.Device, auth.CopilotTokenKey); OK && len(cachedToken) != 0 {
+	if cachedToken, OK := cache.Device.Get[string](auth.CopilotTokenKey); OK && len(cachedToken) != 0 {
 		return cachedToken
 	}
 

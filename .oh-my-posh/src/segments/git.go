@@ -4,18 +4,21 @@ import (
 	"fmt"
 	url2 "net/url"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/jandedobbeleer/oh-my-posh/src/cache"
+	"github.com/jandedobbeleer/oh-my-posh/src/gitstatus"
 	"github.com/jandedobbeleer/oh-my-posh/src/log"
 	"github.com/jandedobbeleer/oh-my-posh/src/regex"
 	"github.com/jandedobbeleer/oh-my-posh/src/runtime"
 	"github.com/jandedobbeleer/oh-my-posh/src/runtime/path"
 	"github.com/jandedobbeleer/oh-my-posh/src/segments/options"
 
-	"gopkg.in/ini.v1"
+	"github.com/jandedobbeleer/oh-my-posh/src/ini"
 )
 
 type Commit struct {
@@ -38,7 +41,6 @@ type User struct {
 	Email string
 }
 
-// GitStatus represents part of the status of a git repository
 type GitStatus struct {
 	ScmStatus
 }
@@ -61,66 +63,34 @@ func (s *GitStatus) add(code string) {
 }
 
 const (
-	// FetchStatus fetches the status of the repository
-	FetchStatus options.Option = "fetch_status"
-	// FetchPushStatus fetches the push-remote status
-	FetchPushStatus options.Option = "fetch_push_status"
-	// IgnoreStatus allows to ignore certain repo's for status information
-	IgnoreStatus options.Option = "ignore_status"
-	// FetchUpstreamIcon fetches the upstream icon
-	FetchUpstreamIcon options.Option = "fetch_upstream_icon"
-	// FetchBareInfo fetches the bare repo status
-	FetchBareInfo options.Option = "fetch_bare_info"
-	// FetchUser fetches the current user for the repo
-	FetchUser options.Option = "fetch_user"
-	// UntrackedModes list the optional untracked files mode per repo
-	UntrackedModes options.Option = "untracked_modes"
-	// IgnoreSubmodules list the optional ignore-submodules mode per repo
+	NativeStatus     options.Option = "native_status"
+	IgnoreStatus     options.Option = "ignore_status"
+	UntrackedModes   options.Option = "untracked_modes"
 	IgnoreSubmodules options.Option = "ignore_submodules"
-	// MappedBranches allows overriding certain branches with an icon/text
-	MappedBranches options.Option = "mapped_branches"
-	// DisableWithJJ disables the git segment when there's a .jj directory in the parent file path
+	MappedBranches   options.Option = "mapped_branches"
+	// Disables the git segment when a .jj directory exists in the parent file path
 	DisableWithJJ options.Option = "disable_with_jj"
 
-	// BranchIcon the icon to use as branch indicator
-	BranchIcon options.Option = "branch_icon"
-	// BranchIdenticalIcon the icon to display when the remote and local branch are identical
+	BranchIcon          options.Option = "branch_icon"
 	BranchIdenticalIcon options.Option = "branch_identical_icon"
-	// BranchAheadIcon the icon to display when the local branch is ahead of the remote
-	BranchAheadIcon options.Option = "branch_ahead_icon"
-	// BranchBehindIcon the icon to display when the local branch is behind the remote
-	BranchBehindIcon options.Option = "branch_behind_icon"
-	// BranchGoneIcon the icon to use when ther's no remote
-	BranchGoneIcon options.Option = "branch_gone_icon"
-	// RebaseIcon shows before the rebase context
-	RebaseIcon options.Option = "rebase_icon"
-	// CherryPickIcon shows before the cherry-pick context
-	CherryPickIcon options.Option = "cherry_pick_icon"
-	// RevertIcon shows before the revert context
-	RevertIcon options.Option = "revert_icon"
-	// CommitIcon shows before the detached context
-	CommitIcon options.Option = "commit_icon"
-	// NoCommitsIcon shows when there are no commits in the repo yet
-	NoCommitsIcon options.Option = "no_commits_icon"
-	// TagIcon shows before the tag context
-	TagIcon options.Option = "tag_icon"
-	// MergeIcon shows before the merge context
-	MergeIcon options.Option = "merge_icon"
-	// UpstreamIcons allows to add custom upstream icons
-	UpstreamIcons options.Option = "upstream_icons"
-	// GithubIcon shows when upstream is github
-	GithubIcon options.Option = "github_icon"
-	// BitbucketIcon shows  when upstream is bitbucket
-	BitbucketIcon options.Option = "bitbucket_icon"
-	// AzureDevOpsIcon shows  when upstream is azure devops
-	AzureDevOpsIcon options.Option = "azure_devops_icon"
-	// CodeCommit shows  when upstream is aws codecommit
-	CodeCommit options.Option = "codecommit_icon"
-	// CodebergIcon shows when upstream is codeberg
-	CodebergIcon options.Option = "codeberg_icon"
-	// GitlabIcon shows when upstream is gitlab
-	GitlabIcon options.Option = "gitlab_icon"
-	// GitIcon shows when the upstream can't be identified
+	BranchAheadIcon     options.Option = "branch_ahead_icon"
+	BranchBehindIcon    options.Option = "branch_behind_icon"
+	BranchGoneIcon      options.Option = "branch_gone_icon"
+	RebaseIcon          options.Option = "rebase_icon"
+	CherryPickIcon      options.Option = "cherry_pick_icon"
+	RevertIcon          options.Option = "revert_icon"
+	CommitIcon          options.Option = "commit_icon"
+	NoCommitsIcon       options.Option = "no_commits_icon"
+	TagIcon             options.Option = "tag_icon"
+	MergeIcon           options.Option = "merge_icon"
+	UpstreamIcons       options.Option = "upstream_icons"
+	GithubIcon          options.Option = "github_icon"
+	BitbucketIcon       options.Option = "bitbucket_icon"
+	AzureDevOpsIcon     options.Option = "azure_devops_icon"
+	CodeCommit          options.Option = "codecommit_icon"
+	CodebergIcon        options.Option = "codeberg_icon"
+	GitlabIcon          options.Option = "gitlab_icon"
+	// Fallback icon when the upstream host can't be identified
 	GitIcon options.Option = "git_icon"
 
 	DETACHED     = "(detached)"
@@ -129,6 +99,8 @@ const (
 
 	trueStr = "true"
 	origin  = "origin"
+
+	mainWorktreeCacheKey = "git_main_worktree"
 )
 
 type Rebase struct {
@@ -137,6 +109,28 @@ type Rebase struct {
 	Current int
 	Total   int
 }
+
+// Optional git probes and the template-visible fields each one populates.
+// A probe runs iff the config references one of its fields (exactly, or via
+// the heuristic fallback for unanalyzable configs; see FieldRefs).
+var (
+	// setStatus with setHEADStatus and setBranchStatus. PushAhead/PushBehind
+	// belong to the push probe but are listed here too: that probe only ever
+	// runs nested inside the status fetch, so referencing its fields must
+	// switch the status fetch on as well.
+	gitStatusFields = []string{
+		workingField, "Staging", "Ahead", "Behind", "BranchStatus", "Upstream", "UpstreamGone",
+		"Hash", "ShortHash", "Rebase", "Merge", "CherryPick", "Revert", "PushAhead", "PushBehind",
+	}
+	gitPushStatusFields = []string{"PushAhead", "PushBehind"}
+	// Upstream maps to both units: the status probe populates it in normal
+	// repos, but the bare-repo path (getBareRepoInfo) only fills it under
+	// the upstream-icon probe, so a bare-repo template referencing
+	// .Upstream must trigger that probe as well.
+	gitUpstreamIconFields = []string{"UpstreamIcon", "UpstreamURL", "RawUpstreamURL", "Upstream"}
+	gitUserFields         = []string{"User"}
+	gitBareFields         = []string{"IsBare"}
+)
 
 type Git struct {
 	configErr      error
@@ -154,26 +148,38 @@ type Git struct {
 	UpstreamURL    string
 	Ref            string
 	RawUpstreamURL string
+	mainWorktree   string
 	Scm
-	stashCount    int
-	Ahead         int
-	PushAhead     int
-	PushBehind    int
-	Behind        int
-	worktreeCount int
-	configOnce    sync.Once
-	IsWorkTree    bool
-	Merge         bool
-	CherryPick    bool
-	Revert        bool
-	poshgit       bool
-	Detached      bool
-	IsBare        bool
-	UpstreamGone  bool
+	FieldRefs
+	stashCount       int
+	Ahead            int
+	PushAhead        int
+	PushBehind       int
+	Behind           int
+	worktreeCount    int
+	mainWorktreeOnce sync.Once
+	configOnce       sync.Once
+	IsWorkTree       bool
+	Merge            bool
+	CherryPick       bool
+	Revert           bool
+	poshgit          bool
+	Detached         bool
+	IsBare           bool
+	UpstreamGone     bool
 }
 
 func (g *Git) Template() string {
 	return " {{ .HEAD }}{{if .BranchStatus }} {{ .BranchStatus }}{{ end }}{{ if .Working.Changed }} \uF044 {{ .Working.String }}{{ end }}{{ if and (.Staging.Changed) (.Working.Changed) }} |{{ end }}{{ if .Staging.Changed }} \uF046 {{ .Staging.String }}{{ end }} " //nolint: lll
+}
+
+// Activation gates on the repository marker: the same upward .git search
+// shouldDisplay runs (memoized at the runtime level, so the double lookup is
+// one walk). Everything else - git command presence, worktree/bare
+// resolution, disable_with_jj - stays in Enabled(), for which the marker's
+// presence is a strict precondition.
+func (g *Git) Activation() Activation {
+	return Activation{ProjectFiles: []string{".git"}}
 }
 
 func (g *Git) Enabled() bool {
@@ -185,7 +191,7 @@ func (g *Git) Enabled() bool {
 		return false
 	}
 
-	fetchUser := g.options.Bool(FetchUser, false)
+	fetchUser := g.fetchUnit(gitUserFields...)
 	g.RepoName = g.repoName()
 
 	if g.IsBare {
@@ -202,7 +208,7 @@ func (g *Git) Enabled() bool {
 		return true
 	}
 
-	displayStatus := g.options.Bool(FetchStatus, false)
+	displayStatus := g.fetchUnit(gitStatusFields...)
 	if displayStatus && g.shouldIgnoreStatus() {
 		displayStatus = false
 	}
@@ -221,7 +227,7 @@ func (g *Git) Enabled() bool {
 		wg.Go(g.setHEADStatus)
 		wg.Go(g.setPushStatus)
 
-		if g.options.Bool(FetchUpstreamIcon, false) {
+		if g.fetchUnit(gitUpstreamIconFields...) {
 			wg.Go(func() {
 				g.UpstreamIcon = g.getUpstreamIcon()
 			})
@@ -231,7 +237,7 @@ func (g *Git) Enabled() bool {
 	} else {
 		g.updateHEADReference()
 
-		if g.options.Bool(FetchUpstreamIcon, false) {
+		if g.fetchUnit(gitUpstreamIconFields...) {
 			g.UpstreamIcon = g.getUpstreamIcon()
 		}
 	}
@@ -267,6 +273,10 @@ func (g *Git) Commit() *Commit {
 		Author:    &User{},
 		Committer: &User{},
 		Refs:      &Refs{},
+	}
+
+	if g.options.Bool(NativeStatus, false) && g.setCommitNative() {
+		return g.commit
 	}
 
 	commitBody := g.getGitCommandOutput("log", "-1", "--pretty=format:an:%an%nae:%ae%ncn:%cn%nce:%ce%nat:%at%nsu:%s%nha:%H%nrf:%D", "--decorate=full")
@@ -319,6 +329,42 @@ func (g *Git) Commit() *Commit {
 	return g.commit
 }
 
+// setCommitNative populates g.commit using the built-in gitstatus engine
+// instead of spawning git. It returns false when HEAD or the commit it
+// points at can't be resolved natively, leaving g.commit untouched so the
+// caller falls back to the exec path.
+func (g *Git) setCommitNative() bool {
+	if g.scmDir == "" {
+		return false
+	}
+
+	if g.Hash == "" {
+		head, err := gitstatus.LoadHead(g.mainSCMDir, g.scmDir)
+		if err != nil {
+			return false
+		}
+		g.Hash = head.Hash
+	}
+
+	info, err := gitstatus.LoadCommit(g.scmDir, g.Hash)
+	if err != nil {
+		return false
+	}
+
+	g.commit.Author.Name = info.Author.Name
+	g.commit.Author.Email = info.Author.Email
+	g.commit.Committer.Name = info.Committer.Name
+	g.commit.Committer.Email = info.Committer.Email
+	g.commit.Timestamp = info.Timestamp
+	g.commit.Subject = info.Subject
+	g.commit.Sha = info.Hash
+	g.commit.Refs.Heads = info.Refs.Heads
+	g.commit.Refs.Tags = info.Refs.Tags
+	g.commit.Refs.Remotes = info.Refs.Remotes
+
+	return true
+}
+
 func (g *Git) StashCount() int {
 	if g.poshgit || g.stashCount != 0 {
 		return g.stashCount
@@ -342,6 +388,12 @@ func (g *Git) Kraken() string {
 			g.Upstream = origin
 		}
 		g.RawUpstreamURL = g.getRemoteURL()
+	}
+
+	if g.Hash == "" && g.scmDir != "" && g.options.Bool(NativeStatus, false) {
+		if head, err := gitstatus.LoadHead(g.mainSCMDir, g.scmDir); err == nil {
+			g.Hash = head.Hash
+		}
 	}
 
 	if g.Hash == "" {
@@ -368,12 +420,12 @@ func (g *Git) shouldDisplay() bool {
 		return false
 	}
 
-	if g.options.Bool(FetchBareInfo, false) {
-		g.IsBare = g.isBareRepo(gitdir)
-	}
-
 	if !g.hasCommand(GITCOMMAND) {
 		return false
+	}
+
+	if g.fetchUnit(gitBareFields...) {
+		g.IsBare = g.isBareRepo(gitdir)
 	}
 
 	return g.isRepo(gitdir)
@@ -399,6 +451,23 @@ func (g *Git) isRepo(gitdir *runtime.FileInfo) bool {
 }
 
 func (g *Git) setUser() {
+	// user.name/user.email are very commonly set only in the user's global
+	// gitconfig, which getGitConfig() never reads (repo-local config only).
+	// Trust the local read only when it has both keys; anything less falls
+	// back to exec git, which merges every config scope the way `git
+	// config` itself does.
+	if cfg, err := g.getGitConfig(); err == nil {
+		section := cfg.Section("user")
+		name := section.Key("name").String()
+		email := section.Key("email").String()
+
+		if name != "" && email != "" {
+			g.User.Name = name
+			g.User.Email = email
+			return
+		}
+	}
+
 	output := g.getGitCommandOutput("config", "--get-regexp", "^user\\.")
 	for line := range strings.SplitSeq(output, "\n") {
 		key, val, ok := strings.Cut(line, " ")
@@ -423,7 +492,7 @@ func (g *Git) isBareRepo(gitDir *runtime.FileInfo) bool {
 	} else {
 		content := g.fileContent(gitDir.ParentFolder, ".git")
 		dir := strings.TrimPrefix(content, "gitdir: ")
-		g.mainSCMDir = filepath.Join(gitDir.ParentFolder, dir)
+		g.mainSCMDir = resolveGitPath(gitDir.ParentFolder, g.convertToLinuxPath(dir))
 	}
 
 	cfg, err := g.getGitConfig()
@@ -448,7 +517,7 @@ func (g *Git) getBareRepoInfo() {
 	branchIcon := g.options.String(BranchIcon, "\uE0A0")
 	g.Ref = strings.Replace(head, "ref: refs/heads/", "", 1)
 	g.HEAD = fmt.Sprintf("%s%s", branchIcon, g.formatBranch(g.Ref))
-	if !g.options.Bool(FetchUpstreamIcon, false) {
+	if !g.fetchUnit(gitUpstreamIconFields...) {
 		return
 	}
 
@@ -479,30 +548,33 @@ func (g *Git) hasWorktree(gitdir *runtime.FileInfo) bool {
 		return false
 	}
 
-	// if we open a worktree file in a WSL shared folder, we have to convert it back
-	// to the mounted path
-	g.mainSCMDir = g.convertToLinuxPath(matches["dir"])
+	// Convert before resolving because filepath.IsAbs("C:/repo/.git") is false on Linux.
+	raw := g.convertToLinuxPath(matches["dir"])
+	g.mainSCMDir = resolveGitPath(gitdir.ParentFolder, raw)
 
-	// in worktrees, the path looks like this: gitdir: path/.git/worktrees/branch
-	// scmDir needs to become path/.git
-	// repoRootDir needs to become path
-	worktreeIndex := strings.LastIndex(g.mainSCMDir, "/worktrees/")
+	// The returned index only applies to the normalized path.
+	adminDir := filepath.ToSlash(filepath.Clean(g.mainSCMDir))
+	worktreeIndex := worktreeAdminIndex(adminDir)
 
 	// in submodules, the path looks like this: gitdir: ../.git/modules/test-submodule
-	// we need the parent folder to detect where the real .git folder is
-	if strings.Contains(g.mainSCMDir, "/modules/") {
-		g.scmDir = resolveGitPath(gitdir.ParentFolder, g.mainSCMDir)
+	// we need the parent folder to detect where the real .git folder is. Test raw rather
+	// than the resolved path: a checkout below a folder named modules would otherwise
+	// drag every genuine worktree in it into this branch.
+	if strings.Contains(raw, "/modules/") && g.isModuleAdminDir(g.mainSCMDir, gitdir.ParentFolder) {
+		g.scmDir = g.mainSCMDir
 		// this might be both a worktree and a submodule, where the path would look like
 		// this: path/.git/modules/module/path/worktrees/location. We cannot distinguish
 		// between worktree and a module path containing the word 'worktree,' however.
-		worktreeIndex = strings.LastIndex(g.scmDir, "/worktrees/")
+		moduleDir := filepath.ToSlash(filepath.Clean(g.scmDir))
+		worktreeIndex = worktreeAdminIndex(moduleDir)
 		if worktreeIndex > -1 && g.env.HasFilesInDir(g.scmDir, "gitdir") {
 			gitDir := filepath.Join(g.scmDir, "gitdir")
 			realGitFolder := g.env.FileContent(gitDir)
 			g.repoRootDir = strings.TrimSuffix(strings.TrimRight(realGitFolder, "\n\r "), ".git")
+			g.repoRootDir = g.convertToLinuxPath(g.repoRootDir)
 			// resolve relative paths (worktree.useRelativePaths = true)
 			g.repoRootDir = resolveGitPath(g.scmDir, g.repoRootDir)
-			g.scmDir = g.scmDir[:worktreeIndex]
+			g.scmDir = moduleDir[:worktreeIndex]
 			g.mainSCMDir = g.scmDir
 			g.IsWorkTree = true
 			return true
@@ -513,20 +585,21 @@ func (g *Git) hasWorktree(gitdir *runtime.FileInfo) bool {
 		return true
 	}
 
-	// convert to absolute path for worktrees only
-	if strings.HasPrefix(g.mainSCMDir, "..") {
-		g.mainSCMDir = filepath.Join(gitdir.ParentFolder, g.mainSCMDir)
-	}
-
 	if worktreeIndex > -1 {
-		gitDir := filepath.Join(g.mainSCMDir, "gitdir")
-		g.scmDir = g.mainSCMDir[:worktreeIndex]
-		gitDirContent := g.env.FileContent(gitDir)
-		g.repoRootDir = strings.TrimSuffix(strings.TrimRight(gitDirContent, "\n\r "), ".git")
+		gitDirContent := g.env.FileContent(filepath.Join(g.mainSCMDir, "gitdir"))
+		gitDirPath := strings.TrimRight(gitDirContent, "\n\r ")
+		root := strings.TrimSuffix(gitDirPath, ".git")
+		root = g.convertToLinuxPath(root)
 		// resolve relative paths (worktree.useRelativePaths = true)
-		g.repoRootDir = resolveGitPath(g.mainSCMDir, g.repoRootDir)
-		g.IsWorkTree = true
-		return true
+		root = resolveGitPath(g.mainSCMDir, root)
+
+		// A genuine worktree's metadata points back at the .git file we just read.
+		if gitDirPath != "" && filepath.Clean(root) == filepath.Clean(gitdir.ParentFolder) {
+			g.scmDir = adminDir[:worktreeIndex]
+			g.repoRootDir = root
+			g.IsWorkTree = true
+			return true
+		}
 	}
 
 	// check for separate git folder(--separate-git-dir)
@@ -570,7 +643,7 @@ func (g *Git) setBranchStatus() {
 }
 
 func (g *Git) setPushStatus() {
-	if !g.options.Bool(FetchPushStatus, false) {
+	if !g.fetchUnit(gitPushStatusFields...) {
 		return
 	}
 
@@ -580,6 +653,10 @@ func (g *Git) setPushStatus() {
 
 	pushRemote := g.getPushRemote()
 	if pushRemote == "" {
+		return
+	}
+
+	if g.options.Bool(NativeStatus, false) && g.setPushStatusNative(pushRemote) {
 		return
 	}
 
@@ -598,6 +675,33 @@ func (g *Git) setPushStatus() {
 	})
 
 	wg.Wait()
+}
+
+// setPushStatusNative computes PushAhead/PushBehind using the built-in
+// gitstatus engine instead of two `git rev-list --count` spawns. pushRemote
+// is a "<remote>/<branch>"-shaped rev the way getPushRemote returns it; the
+// overwhelming majority of the time that's a remote-tracking ref, so this
+// only tries the exact refs/remotes/<pushRemote> path and defers anything
+// else (a local branch, a tag with a matching name, ...) to exec git rather
+// than risk resolving the wrong ref.
+func (g *Git) setPushStatusNative(pushRemote string) bool {
+	if g.Hash == "" || g.scmDir == "" {
+		return false
+	}
+
+	theirs, found, err := gitstatus.ResolveRef(g.scmDir, "refs/remotes/"+pushRemote)
+	if err != nil || !found {
+		return false
+	}
+
+	ahead, behind, err := gitstatus.AheadBehind(g.scmDir, g.Hash, theirs)
+	if err != nil {
+		return false
+	}
+
+	g.PushAhead = ahead
+	g.PushBehind = behind
+	return true
 }
 
 func (g *Git) getPushRemote() string {
@@ -648,8 +752,7 @@ func (g *Git) getGitConfig() (*ini.File, error) {
 			return
 		}
 
-		// ini.Load expects []byte to parse content, not a file path
-		cfg, err := ini.Load([]byte(configData))
+		cfg, err := ini.Load(configData)
 		if err != nil {
 			g.configErr = err
 			return
@@ -788,8 +891,12 @@ func (g *Git) setStatus() {
 	g.UpstreamGone = true
 	statusFormats := g.options.KeyValueMap(StatusFormats, map[string]string{})
 
-	g.Working = &GitStatus{ScmStatus: ScmStatus{Formats: statusFormats}}
-	g.Staging = &GitStatus{ScmStatus: ScmStatus{Formats: statusFormats}}
+	g.Working = &GitStatus{Formats: statusFormats}
+	g.Staging = &GitStatus{Formats: statusFormats}
+
+	if g.options.Bool(NativeStatus, false) && g.setStatusNative() {
+		return
+	}
 
 	untrackedMode := g.getUntrackedFilesMode()
 	args := []string{"status", untrackedMode, "--branch", "--porcelain=2"}
@@ -833,6 +940,56 @@ func (g *Git) setStatus() {
 
 		addToStatus(line)
 	}
+}
+
+// setStatusNative computes the status using the built-in gitstatus engine
+// instead of spawning git. It returns false whenever the repo uses a
+// feature the engine doesn't support (or ignore_submodules is configured,
+// which the engine doesn't apply), leaving g.Working/g.Staging untouched so
+// the caller falls back to the exec path.
+func (g *Git) setStatusNative() bool {
+	if len(g.getIgnoreSubmodulesMode()) > 0 {
+		return false
+	}
+
+	opts := gitstatus.Options{
+		WorktreeGitDir: g.mainSCMDir,
+		CommonGitDir:   g.scmDir,
+		RepoRoot:       g.repoRootDir,
+		UntrackedMode:  strings.TrimPrefix(g.getUntrackedFilesMode(), "-u"),
+	}
+
+	result, err := gitstatus.Load(opts)
+	if err != nil {
+		log.Error(err)
+		return false
+	}
+
+	g.Working.Added = result.Working.Added
+	g.Working.Deleted = result.Working.Deleted
+	g.Working.Modified = result.Working.Modified
+	g.Working.Untracked = result.Working.Untracked
+	g.Working.Unmerged = result.Working.Unmerged
+
+	g.Staging.Added = result.Staging.Added
+	g.Staging.Deleted = result.Staging.Deleted
+	g.Staging.Modified = result.Staging.Modified
+	g.Staging.Untracked = result.Staging.Untracked
+	g.Staging.Unmerged = result.Staging.Unmerged
+
+	g.Hash = result.Hash
+	g.ShortHash = result.Hash
+	if len(result.Hash) >= 7 {
+		g.ShortHash = result.Hash[:7]
+	}
+
+	g.Ref = result.Ref
+	g.Upstream = result.Upstream
+	g.Ahead = result.Ahead
+	g.Behind = result.Behind
+	g.UpstreamGone = result.UpstreamGone
+
+	return true
 }
 
 func (g *Git) getGitCommandOutput(args ...string) string {
@@ -1045,29 +1202,58 @@ func (g *Git) updateHEADReference() {
 }
 
 func (g *Git) resolveDetachedHEAD() {
-	HEADRef := g.getGitCommandOutput("rev-parse", "HEAD")
-
-	if len(HEADRef) >= 7 {
-		g.ShortHash = HEADRef[0:7]
-		g.Hash = HEADRef[0:]
+	if !g.resolveDetachedHash() {
+		g.HEAD = g.options.String(NoCommitsIcon, "\U000F0095 ")
+		return
 	}
+
 	g.Ref = g.ShortHash
 
-	// check for tag
-	tagName := g.getGitCommandOutput("describe", "--tags", "--exact-match")
-	if len(tagName) > 0 {
+	if tagName, found := g.resolveExactTag(); found {
 		g.Ref = tagName
 		g.HEAD = fmt.Sprintf("%s%s", g.options.String(TagIcon, "\uF412"), tagName)
 		return
 	}
 
-	// fallback to no commits found
-	if g.ShortHash == "" {
-		g.HEAD = g.options.String(NoCommitsIcon, "\U000F0095 ")
-		return
+	g.HEAD = fmt.Sprintf("%s%s", g.options.String(CommitIcon, "\uF417"), g.ShortHash)
+}
+
+// resolveDetachedHash fills g.Hash/g.ShortHash for a detached HEAD, reading
+// .git/HEAD directly before falling back to `git rev-parse HEAD` (reftables
+// HEAD, corrupt refs, ...). It reports false only when neither path finds a
+// commit, i.e. a brand-new, commit-less repo.
+func (g *Git) resolveDetachedHash() bool {
+	if g.scmDir != "" && g.options.Bool(NativeStatus, false) {
+		if head, err := gitstatus.LoadHead(g.mainSCMDir, g.scmDir); err == nil && head.Hash != "" {
+			g.Hash = head.Hash
+			g.ShortHash = g.formatSHA(head.Hash)
+			return true
+		}
 	}
 
-	g.HEAD = fmt.Sprintf("%s%s", g.options.String(CommitIcon, "\uF417"), g.ShortHash)
+	HEADRef := g.getGitCommandOutput("rev-parse", "HEAD")
+	if len(HEADRef) < 7 {
+		return false
+	}
+
+	g.ShortHash = HEADRef[0:7]
+	g.Hash = HEADRef
+	return true
+}
+
+// resolveExactTag looks up a tag pointing exactly at g.Hash, native first
+// and falling back to `git describe --tags --exact-match` whenever the
+// native lookup can't answer confidently (an ambiguous match, or a repo
+// shape gitstatus doesn't support).
+func (g *Git) resolveExactTag() (string, bool) {
+	if g.scmDir != "" && g.options.Bool(NativeStatus, false) {
+		if tag, found, err := gitstatus.ExactTag(g.scmDir, g.Hash); err == nil {
+			return tag, found
+		}
+	}
+
+	tagName := g.getGitCommandOutput("describe", "--tags", "--exact-match")
+	return tagName, len(tagName) > 0
 }
 
 func (g *Git) WorktreeCount() int {
@@ -1090,6 +1276,154 @@ func (g *Git) WorktreeCount() int {
 	}
 
 	return count
+}
+
+func (g *Git) MainWorktree() string {
+	if !g.IsWorkTree {
+		return ""
+	}
+
+	g.mainWorktreeOnce.Do(func() {
+		if !g.ensureMainWorktreeContext() {
+			return
+		}
+
+		commonDir := g.commonGitDir()
+		key := fmt.Sprintf("%s@%s", mainWorktreeCacheKey, commonDir)
+		if mainWorktree, found := cache.Session.Get[string](key); found {
+			g.mainWorktree = mainWorktree
+			return
+		}
+
+		// NUL-delimited porcelain is stable and survives RunCommand's whitespace trimming.
+		output := g.getGitCommandOutput("worktree", "list", "--porcelain", "-z")
+		mainWorktree, valid := parseMainWorktree(output)
+		if !valid {
+			return
+		}
+
+		g.mainWorktree = g.convertToLinuxPath(mainWorktree)
+		cache.Session.Set(key, g.mainWorktree, cache.INFINITE)
+	})
+
+	return g.mainWorktree
+}
+
+func (g *Git) ensureMainWorktreeContext() bool {
+	if g.command != "" && g.commonGitDir() != "" {
+		return true
+	}
+
+	if g.env.Flags().DataOnly {
+		return false
+	}
+
+	var gitdir *runtime.FileInfo
+	if g.commonGitDir() == "" {
+		var err error
+		gitdir, err = g.env.HasParentFilePath(".git", true)
+		if err != nil {
+			return false
+		}
+	}
+
+	if g.command == "" && !g.hasCommand(GITCOMMAND) {
+		return false
+	}
+
+	if gitdir != nil && (!g.isRepo(gitdir) || !g.IsWorkTree) {
+		return false
+	}
+
+	return g.commonGitDir() != ""
+}
+
+func (g *Git) commonGitDir() string {
+	mainSCMDir := filepath.ToSlash(g.mainSCMDir)
+	if commonDir, _, found := strings.CutLast(mainSCMDir, "/worktrees/"); found {
+		return commonDir
+	}
+
+	return filepath.ToSlash(g.scmDir)
+}
+
+// isModuleAdminDir reports whether target is a submodule administrative directory
+// belonging to the checkout at parent, or a linked worktree inside one.
+//
+// A pointer whose spelling merely contains a modules component is not enough: a
+// --separate-git-dir target such as /srv/modules/project.git spells the same substring
+// without being a submodule. Nor does the shape help the way it does for worktrees. A
+// submodule's name is its path, so it may hold separators (.git/modules/vendor/libfoo),
+// it may nest (.../modules/vendor/libfoo/modules/inner), and the folder in front of
+// modules is only called .git when the superproject has no --separate-git-dir of its own
+// (../../sepgit/modules/sub is a real pointer).
+//
+// What does hold is that git records core.worktree in a submodule's git dir, pointing
+// back at the checkout, and never records it in a --separate-git-dir target. That
+// back-reference is the same kind of proof the worktree branch takes from its gitdir
+// metadata.
+func (g *Git) isModuleAdminDir(target, parent string) bool {
+	// A linked worktree inside a module dir keeps no config of its own, so it cannot
+	// carry core.worktree. Its gitdir metadata identifies it instead, which is what the
+	// worktree case in the caller goes on to validate.
+	if worktreeAdminIndex(target) > -1 && g.env.HasFilesInDir(target, "gitdir") {
+		return true
+	}
+
+	cfg, err := ini.Load(g.fileContent(target, "config"))
+	if err != nil {
+		log.Error(err)
+		return false
+	}
+
+	worktree := cfg.Section("core").Key("worktree").String()
+	if worktree == "" {
+		log.Debug("no core.worktree in", target, "- not a submodule git dir")
+		return false
+	}
+
+	// core.worktree is relative to the git dir holding it, and may need the same WSL
+	// conversion as the pointer itself.
+	root := resolveGitPath(target, g.convertToLinuxPath(worktree))
+
+	return filepath.Clean(root) == filepath.Clean(parent)
+}
+
+func worktreeAdminIndex(dir string) int {
+	const segment = "/worktrees/"
+
+	normalised := filepath.ToSlash(filepath.Clean(dir))
+	index := strings.LastIndex(normalised, segment)
+	if index < 0 {
+		return -1
+	}
+
+	name := normalised[index+len(segment):]
+	if name == "" || strings.Contains(name, "/") {
+		return -1
+	}
+
+	return index
+}
+
+func parseMainWorktree(output string) (string, bool) {
+	// Git guarantees the main worktree is the first record.
+	record, _, found := strings.Cut(output, "\x00\x00")
+	if !found {
+		return "", false
+	}
+
+	fields := strings.Split(record, "\x00")
+	mainWorktree, found := strings.CutPrefix(fields[0], "worktree ")
+	if !found || mainWorktree == "" {
+		return "", false
+	}
+
+	if slices.Contains(fields[1:], "bare") {
+		return "", true
+	}
+
+	return mainWorktree, true
 }
 
 func (g *Git) getRemoteURL() string {
@@ -1163,9 +1497,8 @@ func (g *Git) repoName() string {
 		return path.Base(g.convertToLinuxPath(g.repoRootDir))
 	}
 
-	ind := strings.LastIndex(g.mainSCMDir, ".git/worktrees")
-	if ind > -1 {
-		return path.Base(g.mainSCMDir[:ind])
+	if repoRoot, _, found := strings.CutLast(g.mainSCMDir, ".git/worktrees"); found {
+		return path.Base(repoRoot)
 	}
 
 	return ""
