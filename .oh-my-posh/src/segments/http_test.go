@@ -13,8 +13,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// timeoutCapturingEnv wraps the mock environment to record the timeout argument
-// passed to HTTPRequest, so tests can assert it flows through correctly.
 type timeoutCapturingEnv struct {
 	*mock.Environment
 	capturedTimeout int
@@ -100,10 +98,8 @@ func TestHTTPSegmentEnabled(t *testing.T) {
 			capturing := &timeoutCapturingEnv{Environment: inner}
 
 			cs := &HTTP{
-				Base: Base{
-					env:     capturing,
-					options: props,
-				},
+				env:     capturing,
+				options: props,
 			}
 
 			_ = cs.Enabled()
@@ -121,11 +117,9 @@ func TestHTTPSegmentCache(t *testing.T) {
 
 	// Create and populate HTTP segment
 	original := &HTTP{
-		Base: Base{
-			Segment: &Segment{
-				Text:  " Electron: v39.2.6 ",
-				Index: 1,
-			},
+		Segment: &Segment{
+			Text:  " Electron: v39.2.6 ",
+			Index: 1,
 		},
 	}
 
@@ -140,9 +134,7 @@ func TestHTTPSegmentCache(t *testing.T) {
 
 	// Unmarshal back (like restoreCache does)
 	restored := &HTTP{
-		Base: Base{
-			Segment: &Segment{},
-		},
+		Segment: &Segment{},
 	}
 
 	err = json.Unmarshal(data, restored)

@@ -7,8 +7,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/hashicorp/hcl/v2/gohcl"
-	"github.com/hashicorp/hcl/v2/hclparse"
 	"github.com/jandedobbeleer/oh-my-posh/src/segments/options"
 )
 
@@ -16,28 +14,76 @@ const (
 	Command options.Option = "command"
 )
 
+// terraformVersionFields lists what the version fetch populates: the single
+// derived unit of this segment (see FieldRefs). Default-off historically,
+// so the unanalyzable fallback narrows by the substring heuristic like the
+// SCM units, unlike the language segments' fail-open version fetch.
+var terraformVersionFields = []string{"Version"}
+
 type Terraform struct {
 	Base
-
 	TerraformBlock
 	WorkspaceName string
+	FieldRefs
 }
 
 func (tf *Terraform) Template() string {
 	return " {{ .WorkspaceName }}{{ if .Version }} {{ .Version }}{{ end }} "
 }
 
-type TerraFormConfig struct {
-	Terraform *TerraformBlock `hcl:"terraform,block"`
+type TerraformBlock struct {
+	Version *string `json:"terraform_version"`
 }
 
-type TerraformBlock struct {
-	Version *string `hcl:"required_version" json:"terraform_version"`
+// contextConditions returns the folders and file globs whose presence puts
+// the segment in context, shared between the activation gate and inContext
+// so the two can never diverge.
+func (tf *Terraform) contextConditions(fetchVersion bool) (folders, globs []string) {
+	folders = []string{".terraform"}
+	globs = []string{".tf", ".tfplan", ".tfstate"}
+
+	if fetchVersion {
+		_, tenvVersionFile := tf.tenvSources()
+		globs = append(globs, "versions.tf", "main.tf", "terraform.tfstate", tenvVersionFile)
+	}
+
+	return folders, globs
+}
+
+// Activation gates on the context conditions: the segment can only activate
+// when the cwd carries the .terraform folder or one of the files the
+// context check reacts to.
+// The reference set is delivered right after Init, before the engine
+// consults the gate, so the version-file conditions join exactly when the
+// version fetch is derived on.
+func (tf *Terraform) Activation() Activation {
+	folders, globs := tf.contextConditions(tf.fetchUnit(terraformVersionFields...))
+
+	return Activation{
+		Folders:   folders,
+		FileGlobs: globs,
+	}
+}
+
+// inContext re-verifies the context conditions even though a passing gate
+// implies a match: Force and pinned data bypass the gate, so Enabled must
+// stay standalone-correct. The re-check hits the memoized directory listing
+// and stat results.
+func (tf *Terraform) inContext(fetchVersion bool) bool {
+	folders, globs := tf.contextConditions(fetchVersion)
+
+	for _, folder := range folders {
+		if tf.env.HasFolder(filepath.Join(tf.env.Pwd(), folder)) {
+			return true
+		}
+	}
+
+	return slices.ContainsFunc(globs, tf.env.HasFiles)
 }
 
 func (tf *Terraform) Enabled() bool {
 	cmd := tf.options.String(Command, "terraform")
-	fetchVersion := tf.options.Bool(options.FetchVersion, false)
+	fetchVersion := tf.fetchUnit(terraformVersionFields...)
 
 	if !tf.env.HasCommand(cmd) || !tf.inContext(fetchVersion) {
 		return false
@@ -63,8 +109,6 @@ func (tf *Terraform) Enabled() bool {
 	return true
 }
 
-// tenvSources returns the environment variable and version file tenv uses to
-// pin the version, based on whether the segment targets terraform or tofu.
 func (tf *Terraform) tenvSources() (envVar, versionFile string) {
 	cmd := tf.options.String(Command, "terraform")
 	if strings.Contains(cmd, "tofu") {
@@ -101,27 +145,6 @@ func (tf *Terraform) setVersionFromTenv() bool {
 	return true
 }
 
-func (tf *Terraform) inContext(fetchVersion bool) bool {
-	terraformFolder := filepath.Join(tf.env.Pwd(), ".terraform")
-
-	if tf.env.HasFolder(terraformFolder) {
-		return true
-	}
-
-	files := []string{".tf", ".tfplan", ".tfstate"}
-	if slices.ContainsFunc(files, tf.env.HasFiles) {
-		return true
-	}
-
-	if !fetchVersion {
-		return false
-	}
-
-	_, tenvVersionFile := tf.tenvSources()
-	versionFiles := []string{"versions.tf", "main.tf", "terraform.tfstate", tenvVersionFile}
-	return slices.ContainsFunc(versionFiles, tf.env.HasFiles)
-}
-
 func (tf *Terraform) setVersionFromTfFiles() error {
 	files := []string{"versions.tf", "main.tf"}
 	for _, file := range files {
@@ -129,20 +152,13 @@ func (tf *Terraform) setVersionFromTfFiles() error {
 			continue
 		}
 
-		parser := hclparse.NewParser()
 		content := tf.env.FileContent(file)
-		hclFile, diags := parser.ParseHCL([]byte(content), file)
-		if diags != nil {
+		version, ok := extractRequiredVersion(content)
+		if !ok {
 			continue
 		}
 
-		var config TerraFormConfig
-		diags = gohcl.DecodeBody(hclFile.Body, nil, &config)
-		if diags != nil || config.Terraform == nil {
-			continue
-		}
-
-		tf.TerraformBlock = *config.Terraform
+		tf.Version = &version
 		return nil
 	}
 	return errors.New("no valid terraform files found")

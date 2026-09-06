@@ -15,7 +15,6 @@ const (
 	localeTimeCacheKey = "locale_time_layout"
 )
 
-// localeCache abstracts the persistent store used for locale layout strings.
 // The default implementation writes to cache.Device; tests inject a simple
 // in-memory map so they never touch the real device store.
 type localeCache interface {
@@ -26,16 +25,15 @@ type localeCache interface {
 type deviceLocaleCache struct{}
 
 func (deviceLocaleCache) get(key string) (string, bool) {
-	return cache.Get[string](cache.Device, key)
+	return cache.Device.Get[string](key)
 }
 
 func (deviceLocaleCache) set(key, val string) {
-	cache.Set(cache.Device, key, val, cache.INFINITE)
+	cache.Device.Set(key, val, cache.INFINITE)
 }
 
 var (
-	// localeLayoutsStore is the backing store for cached layouts; replaced by a
-	// mock in tests.
+	// Replaced by a mock in tests.
 	localeLayoutsStore localeCache = deviceLocaleCache{}
 
 	// localeLayoutsResolver is set by init() in the platform-specific files
@@ -47,9 +45,8 @@ var (
 	localeResolveOnce = &sync.Once{}
 )
 
-// getLocaleLayouts returns the OS short-date and short-time layouts as Go
-// time format strings. Results are stored in the device cache (via
-// localeLayoutsStore) so the OS is queried at most once per device.
+// Results are stored in the device cache (via localeLayoutsStore) so the OS
+// is queried at most once per device.
 func getLocaleLayouts() (string, string) {
 	dateLayout, dateOK := localeLayoutsStore.get(localeDateCacheKey)
 	timeLayout, timeOK := localeLayoutsStore.get(localeTimeCacheKey)

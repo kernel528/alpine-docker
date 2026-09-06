@@ -6,12 +6,12 @@ import (
 	"github.com/jandedobbeleer/oh-my-posh/src/segments"
 	"github.com/jandedobbeleer/oh-my-posh/src/shell"
 
-	"github.com/spf13/cobra"
+	"github.com/jandedobbeleer/oh-my-posh/src/cmdtree"
 )
 
 const copilotServiceName = "copilot"
 
-var copilotCmd = &cobra.Command{
+var copilotCmd = &cmdtree.Command{
 	Use:   copilotServiceName,
 	Short: "Render a prompt for GitHub Copilot CLI statusline",
 	Long: `Render a prompt for GitHub Copilot CLI statusline integration.
@@ -23,15 +23,20 @@ model name, token usage, costs, and more.
 Example usage in GitHub Copilot CLI settings (%USERPROFILE%\.copilot\statusline.cmd):
   @echo off
   oh-my-posh copilot --config %USERPROFILE%\.config\ohmyposh\copilot.toml`,
-	Args: cobra.NoArgs,
+	Args: cmdtree.NoArgs,
 	Run: statuslineRun(
 		shell.COPILOTCLI,
 		cache.COPILOTCLICACHE,
 		func(d *segments.CopilotCLIData) string { return d.SessionID },
+		copilotPWD,
 		config.CopilotCLI,
 	),
 }
 
 func init() {
 	RootCmd.AddCommand(copilotCmd)
+}
+
+func copilotPWD(d *segments.CopilotCLIData) string {
+	return workingDirectory(d.Workspace.CurrentDir, d.CWD)
 }

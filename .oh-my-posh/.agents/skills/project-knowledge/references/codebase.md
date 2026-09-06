@@ -2,14 +2,38 @@
 
 ## Docs linting
 
-- Two markdown gates with different coverage (verified 2026-07-14): the Vale CI workflow
+- Two markdown gates cover skill docs (updated 2026-07-30): the Vale CI workflow
   (`.github/workflows/vale.yml`) explicitly lints `AGENTS.md`, `.github/copilot-instructions.md`,
-  and `.agents/skills`, while `markdownlint-cli2` skips dot-directories entirely - its globs never
-  match `.agents/` or `.github/`, even when passed explicit paths. Lint skill docs with Vale
-  before pushing; for markdownlint, copy them to a non-dot directory alongside
-  `.markdownlint-cli2.yaml`.
+  and `.agents/skills`, and `markdownlint-cli2`'s `**/*.md` glob in `.markdownlint-cli2.yaml` also
+  reaches `.agents/skills` - only the two explicit `ignores` entries there are excluded. Lint skill
+  doc changes with both `vale <path>` and `npx markdownlint-cli2 --config .markdownlint-cli2.yaml
+  <path>` before pushing.
 - Vale fails CI on error-level findings only; warnings pass. Justified terms (Go interface
   wording, zsh feature names) get file-scoped rule overrides in `.vale.ini`, each with a comment.
+
+## Windows git rebase with core.autocrlf=true
+
+- An interactive `git rebase --autosquash` can stop mid-sequence with "Your local changes to
+  `<file>` would be overwritten by merge" on a plain `pick` that has no real content conflict
+  (verified 2026-07-30). Root cause: `core.autocrlf=true` renormalizes line endings on checkout,
+  which git treats as a working-tree modification that blocks the next pick. Toggle
+  `git config core.autocrlf false` for the duration of the rebase (restore it after), rather than
+  trying to resolve a conflict that doesn't reflect the actual diff.
+
+## SVG renderer (src/svg)
+
+- The window chrome's "shadow" must be a filled silhouette rect offset +4/+4 behind the window
+  (`writeWindowChrome`, `shadowOffset`), never an `feDropShadow` filter (verified 2026-09-04).
+  A filter casts the silhouette of what is actually painted; the window's border rect is
+  `fill="none"`, so a filter shadows only the 1px stroke and no solid block appears on the
+  right/bottom. The CSS it mirrors is `box-shadow: 4px 4px 0 var(--omp-frame-shadow)` on
+  `.theme-code-block` in `website/src/css/custom.css` - a solid offset block, black-ish in
+  light mode, white in dark mode.
+- The canvas grows by exactly `shadowOffset` on the right/bottom so the silhouette is not
+  clipped by the viewBox; tests that count `<rect` elements must include the shadow rect.
+- After changing `src/svg/`, regenerate the website previews or the homepage/theme gallery stay
+  stale: build from `src/` (`go build -o ..\oh-my-posh.exe .`), then run
+  `node website/export_themes.mjs` with `OMP_BIN` pointing at that binary.
 
 ## Dev environment
 
@@ -40,6 +64,10 @@
 - Segment writers gob-encode only exported fields. `segments.Base.env/options` are unexported and
   MUST survive a cache restore: overlay the restored data onto the writer initialized by
   `MapSegmentWithWriter`, never replace the writer.
+- `runtime/cmd.RunWithEnv` applies `strings.TrimSpace` to the complete command output before
+  returning it (verified 2026-07-26). If a segment encodes an empty final field as a trailing blank
+  line, that field is lost. Use a record format that retains a final non-whitespace delimiter or
+  sentinel, and validate the record before assigning parsed state.
 
 ## Cache
 
