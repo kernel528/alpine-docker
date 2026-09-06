@@ -4,19 +4,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
-	"strings"
-
 	"slices"
+	"strings"
 
 	"github.com/jandedobbeleer/oh-my-posh/src/segments/options"
 )
 
 const (
-	// FetchContext is the property used to fetch the current docker context
-	FetchContext options.Option = "fetch_context"
-	// DockerCommand is the property used to specify the docker command to use
+	FetchContext  options.Option = "fetch_context"
 	DockerCommand options.Option = "docker_command"
-	// Filter is the property used to specify a filter to apply to docker ps results in environment mode, see https://docs.docker.com/reference/cli/docker/container/ls/#filter
+	// Filter applies to docker ps results in environment mode, see https://docs.docker.com/reference/cli/docker/container/ls/#filter
 	Filter options.Option = "filter"
 )
 
@@ -62,7 +59,7 @@ func (d *Docker) configFiles() []string {
 	return files
 }
 
-func (d *Docker) Enabled() bool {
+func (d *Docker) extensions() []string {
 	extensions := []string{
 		"compose.yml",
 		"compose.yaml",
@@ -71,15 +68,34 @@ func (d *Docker) Enabled() bool {
 		"Dockerfile",
 	}
 
-	extensions = d.options.StringArray(LanguageExtensions, extensions)
+	return d.options.StringArray(LanguageExtensions, extensions)
+}
 
+// Activation gates the files display mode on its file globs (the presence
+// check formerly duplicated in Enabled). The context and environment modes
+// stay ungated: they enable through environment variables that may be unset
+// while a context is still configured in $HOME/.docker/config.json, which no
+// cwd-scoped condition expresses.
+func (d *Docker) Activation() Activation {
+	if d.options.String(DisplayMode, DisplayModeContext) != DisplayModeFiles {
+		return Activation{Always: true}
+	}
+
+	return Activation{FileGlobs: d.extensions()}
+}
+
+func (d *Docker) Enabled() bool {
 	displayMode := d.options.String(DisplayMode, DisplayModeContext)
 
 	switch displayMode {
 	case DisplayModeContext:
 		return d.fetchContext()
 	case DisplayModeFiles:
-		if !slices.ContainsFunc(extensions, d.env.HasFiles) {
+		// Re-verified even though a passing gate implies a match: Force and
+		// pinned data bypass the gate, so Enabled must stay
+		// standalone-correct. The re-check is a hit on the memoized
+		// directory listing.
+		if !slices.ContainsFunc(d.extensions(), d.env.HasFiles) {
 			return false
 		}
 

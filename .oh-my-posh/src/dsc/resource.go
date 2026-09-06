@@ -7,12 +7,18 @@ import (
 	"reflect"
 	"strings"
 
-	"github.com/invopop/jsonschema"
 	"github.com/jandedobbeleer/oh-my-posh/src/cache"
 	"github.com/jandedobbeleer/oh-my-posh/src/log"
 )
 
 type Resource[T State[T]] struct {
+	// SchemaJSON is the resource's JSON schema, generated ahead of time and
+	// embedded at the construction site. Reflecting it at runtime would link
+	// invopop/jsonschema (and go/ast, go/parser, go/doc) into the binary for
+	// output that never changes between builds; a golden test per resource
+	// regenerates the schema and fails on drift.
+	SchemaJSON string `json:"-"`
+
 	States []T `json:"states,omitempty" jsonschema:"title=states,description=The different states of the resource"`
 }
 
@@ -23,7 +29,7 @@ type State[T any] interface {
 }
 
 func (resource *Resource[T]) Load() {
-	states, ok := cache.Get[[]T](cache.Device, resource.cacheKey())
+	states, ok := cache.Device.Get[[]T](resource.cacheKey())
 	if !ok {
 		log.Debug("no states found in cache")
 		return
@@ -33,7 +39,7 @@ func (resource *Resource[T]) Load() {
 }
 
 func (resource *Resource[T]) Save() {
-	cache.Set(cache.Device, resource.cacheKey(), resource.States, cache.INFINITE)
+	cache.Device.Set(resource.cacheKey(), resource.States, cache.INFINITE)
 }
 
 func (resource *Resource[T]) Add(item T) {
@@ -91,17 +97,7 @@ func (resource *Resource[T]) Test(_ string) error {
 }
 
 func (resource *Resource[T]) Schema() string {
-	reflector := jsonschema.Reflector{
-		ExpandedStruct: true,
-		DoNotReference: true,
-	}
-
-	schema := reflector.Reflect(resource)
-	schema.ID = jsonschema.ID(resource.getItemTypeName())
-	schema.Properties.Delete("$schema")
-	schemaJSON, _ := json.MarshalIndent(schema, "", "  ")
-
-	return string(schemaJSON)
+	return resource.SchemaJSON
 }
 
 func (resource *Resource[T]) getItemTypeName() string {

@@ -1,9 +1,9 @@
-//go:build !windows
+//go:build !windows && !js
 
 package runtime
 
 import (
-	"os"
+	"errors"
 	"strconv"
 	"strings"
 	"time"
@@ -13,13 +13,7 @@ import (
 	"github.com/shirou/gopsutil/v4/host"
 	mem "github.com/shirou/gopsutil/v4/mem"
 	terminal "github.com/wayneashleyberry/terminal-dimensions"
-	"golang.org/x/sys/unix"
 )
-
-func (term *Terminal) Root() bool {
-	defer log.Trace(time.Now())
-	return os.Geteuid() == 0
-}
 
 func (term *Terminal) QueryWindowTitles(_, _ string) (string, error) {
 	return "", &NotImplemented{}
@@ -32,13 +26,13 @@ func (term *Terminal) QueryMediaPlayer(_ string) (*MediaInfo, error) {
 func (term *Terminal) IsWsl() bool {
 	defer log.Trace(time.Now())
 	const key = "is_wsl"
-	if val, found := cache.Get[bool](cache.Device, key); found {
+	if val, found := cache.Device.Get[bool](key); found {
 		return val
 	}
 
 	var val bool
 	defer func() {
-		cache.Set(cache.Device, key, val, cache.INFINITE)
+		cache.Device.Set(key, val, cache.INFINITE)
 	}()
 
 	val = term.HasCommand("wslpath")
@@ -69,18 +63,12 @@ func (term *Terminal) TerminalWidth() (int, error) {
 	}
 
 	width, err := terminal.Width()
-	if err != nil {
-		log.Error(err)
+	if width == 0 {
+		width, err = resolveTerminalWidth(width, err, term.Getenv("COLUMNS"))
 	}
 
-	// fetch width from the environment variable
-	// in case the terminal width is not available
-	if width == 0 {
-		i, err := strconv.Atoi(term.Getenv("COLUMNS"))
-		if err != nil {
-			log.Error(err)
-		}
-		width = uint(i)
+	if err != nil {
+		log.Error(err)
 	}
 
 	term.CmdFlags.TerminalWidth = int(width)
@@ -89,15 +77,31 @@ func (term *Terminal) TerminalWidth() (int, error) {
 	return term.CmdFlags.TerminalWidth, err
 }
 
+func resolveTerminalWidth(width uint, terminalErr error, columns string) (uint, error) {
+	if width != 0 {
+		return width, terminalErr
+	}
+
+	columnWidth, err := strconv.Atoi(columns)
+	if err != nil {
+		return 0, errors.Join(terminalErr, err)
+	}
+	if columnWidth <= 0 {
+		return 0, errors.Join(terminalErr, errors.New("terminal width must be greater than zero"))
+	}
+
+	return uint(columnWidth), nil
+}
+
 func (term *Terminal) Platform() string {
 	const key = "environment_platform"
-	if val, found := cache.Get[string](cache.Device, key); found {
+	if val, found := cache.Device.Get[string](key); found {
 		return val
 	}
 
 	var platform string
 	defer func() {
-		cache.Set(cache.Device, key, platform, cache.INFINITE)
+		cache.Device.Set(key, platform, cache.INFINITE)
 	}()
 
 	if wsl := term.Getenv("WSL_DISTRO_NAME"); len(wsl) != 0 {
@@ -161,11 +165,6 @@ func (term *Terminal) ConvertToLinuxPath(input string) string {
 		return linuxPath
 	}
 	return input
-}
-
-func (term *Terminal) DirIsWritable(input string) bool {
-	defer log.Trace(time.Now(), input)
-	return unix.Access(input, unix.W_OK) == nil
 }
 
 func (term *Terminal) Connection(_ ConnectionType) (*Connection, error) {

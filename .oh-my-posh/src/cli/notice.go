@@ -6,18 +6,17 @@ import (
 
 	"github.com/jandedobbeleer/oh-my-posh/src/cache"
 	"github.com/jandedobbeleer/oh-my-posh/src/cli/upgrade"
+	"github.com/jandedobbeleer/oh-my-posh/src/cmdtree"
 	"github.com/jandedobbeleer/oh-my-posh/src/config"
 	"github.com/jandedobbeleer/oh-my-posh/src/runtime"
-	"github.com/spf13/cobra"
 )
 
-// noticeCmd represents the notice command
-var noticeCmd = &cobra.Command{
+var noticeCmd = &cmdtree.Command{
 	Use:   "notice",
 	Short: "Print the upgrade notice when a new version is available.",
 	Long:  "Print the upgrade notice when a new version is available.",
-	Args:  cobra.NoArgs,
-	Run: func(_ *cobra.Command, _ []string) {
+	Args:  cmdtree.NoArgs,
+	Run: func(_ *cmdtree.Command, _ []string) {
 		env := &runtime.Terminal{}
 		env.Init(&runtime.Flags{})
 
@@ -25,7 +24,7 @@ var noticeCmd = &cobra.Command{
 		defer cache.Close()
 
 		// Skip if we already checked within the configured interval
-		if _, ok := cache.Get[string](cache.Device, upgrade.CACHEKEY); ok {
+		if _, ok := cache.Device.Get[string](upgrade.CACHEKEY); ok {
 			return
 		}
 
@@ -33,7 +32,7 @@ var noticeCmd = &cobra.Command{
 
 		defer func() {
 			// Set the cache key after the notice check to prevent redundant checks
-			cache.Set(cache.Device, upgrade.CACHEKEY, "true", cfg.Upgrade.Interval)
+			cache.Device.Set(upgrade.CACHEKEY, "true", cfg.Upgrade.Interval)
 		}()
 
 		if notice, hasNotice := cfg.Upgrade.Notice(); hasNotice {

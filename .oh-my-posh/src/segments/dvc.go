@@ -2,7 +2,6 @@ package segments
 
 import "encoding/json"
 
-// DvcStatus represents the status of a DVC repository
 type DvcStatus struct {
 	ScmStatus
 }
@@ -33,6 +32,11 @@ func (d *Dvc) Template() string {
 	return "  {{ .Status.String }} "
 }
 
+// Activation gates on the repository marker Enabled searches for.
+func (d *Dvc) Activation() Activation {
+	return Activation{ProjectFiles: []string{".dvc"}}
+}
+
 func (d *Dvc) Enabled() bool {
 	if !d.hasCommand(DVCCOMMAND) {
 		return false
@@ -44,7 +48,7 @@ func (d *Dvc) Enabled() bool {
 	}
 
 	statusFormats := d.options.KeyValueMap(StatusFormats, map[string]string{})
-	d.Status = &DvcStatus{ScmStatus: ScmStatus{Formats: statusFormats}}
+	d.Status = &DvcStatus{Formats: statusFormats}
 
 	output, err := d.env.RunCommand(d.command, "status", "--json")
 	if err != nil {
@@ -65,7 +69,7 @@ func (d *Dvc) CacheKey() (string, bool) {
 	return dir.Path, true
 }
 
-// setStatus parses the output of `dvc status --json`, which has the shape:
+// `dvc status --json` has the shape:
 //
 //	{"<stage>": [{"changed outs": {"<file>": "<state>"}}, {"changed deps": {"<file>": "<state>"}}], ...}
 //
