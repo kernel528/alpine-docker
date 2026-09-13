@@ -36,6 +36,7 @@ alias kcuc='kubectl config use-context'
 alias kcsc='kubectl config set-context'
 alias kcdc='kubectl config delete-context'
 alias kccc='kubectl config current-context'
+alias kcrc='kubectl config rename-context'
 
 # List all contexts
 alias kcgc='kubectl config get-contexts'
@@ -93,6 +94,7 @@ alias kdelcm='kubectl delete configmap'
 # Secret management
 alias kgsec='kubectl get secret'
 alias kgseca='kubectl get secret --all-namespaces'
+alias kesec='kubectl edit secret'
 alias kdsec='kubectl describe secret'
 alias kdelsec='kubectl delete secret'
 
